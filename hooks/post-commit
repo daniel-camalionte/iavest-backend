@@ -1,0 +1,12 @@
+#!/bin/bash
+# post-commit: Exporta arquivos alterados no commit para a pasta de staging/deploy
+
+HOOKS_DIR="$(dirname "$0")"
+source "${HOOKS_DIR}/_export_commit.sh"
+
+COMMIT_HASH=$(git rev-parse --short HEAD)
+
+# Arquivos adicionados, copiados, modificados ou renomeados (exclui deleções puras)
+FILES=$(git diff-tree --no-commit-id -r --name-only --diff-filter=ACMR HEAD)
+
+export_commit "$COMMIT_HASH" "$FILES"
