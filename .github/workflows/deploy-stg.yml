@@ -23,7 +23,7 @@ jobs:
           username: ${{ secrets.FTP_USER }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./
-          server-dir: /apps_wsgi/stg/
+          server-dir: ../apps_wsgi/stg/
           dangerous-clean-slate: true
           exclude: |
             **/.git*
