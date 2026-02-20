@@ -16,32 +16,31 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Debug FTP
-        env:
-          FTP_HOST: ${{ secrets.FTP_HOST }}
-          FTP_USER: ${{ secrets.FTP_USER }}
-          FTP_PASS: ${{ secrets.FTP_PASSWORD }}
+      - name: Install lftp
+        run: sudo apt-get install -y lftp
+
+      - name: Upload via FTP
         run: |
-          printf '%s\n' \
-            'import ftplib, os' \
-            'host = os.environ["FTP_HOST"]' \
-            'user = os.environ["FTP_USER"]' \
-            'password = os.environ["FTP_PASS"]' \
-            'ftp = ftplib.FTP()' \
-            'ftp.set_debuglevel(2)' \
-            'ftp.connect(host, 21, timeout=30)' \
-            'ftp.login(user, password)' \
-            'import io' \
-            'try:' \
-            '    ftp.storbinary("STOR test_visivel.txt", io.BytesIO(b"hello from github actions"))' \
-            '    print("=== STOR raiz OK")' \
-            'except Exception as e:' \
-            '    print("=== STOR raiz FALHOU:", e)' \
-            'try:' \
-            '    ftp.storbinary("STOR apps_wsgi/stg/test_visivel.txt", io.BytesIO(b"hello from github actions"))' \
-            '    print("=== STOR apps_wsgi/stg OK")' \
-            'except Exception as e:' \
-            '    print("=== STOR apps_wsgi/stg FALHOU:", e)' \
-            'ftp.quit()' \
-            > /tmp/ftp_debug.py
-          python3 /tmp/ftp_debug.py
+          lftp -e "
+            set ftp:ssl-force yes;
+            set ftp:ssl-protect-data yes;
+            set ssl:verify-certificate no;
+            set net:timeout 30;
+            open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASSWORD }}' ${{ secrets.FTP_HOST }};
+            cd apps_wsgi/stg;
+            mirror -R --verbose \
+              --exclude-glob .git \
+              --exclude-glob .git/ \
+              --exclude-glob virtual_env/ \
+              --exclude-glob dump/ \
+              --exclude-glob __pycache__/ \
+              --exclude-glob '*.pyc' \
+              --exclude-glob static/ \
+              --exclude-glob image/ \
+              --exclude-glob .env \
+              --exclude-glob .claude/ \
+              --exclude-glob .github/ \
+              --exclude-glob .vscode/ \
+              . .;
+            quit
+          "
