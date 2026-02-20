@@ -26,17 +26,17 @@ jobs:
             set net:timeout 30;
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASSWORD }}' ${{ secrets.FTP_HOST }};
             mirror -R --delete --verbose \
-              --exclude-glob .git* \
-              --exclude-glob virtual_env/ \
-              --exclude-glob dump/ \
-              --exclude-glob __pycache__/ \
-              --exclude-glob '*.pyc' \
-              --exclude-glob static/ \
-              --exclude-glob image/ \
-              --exclude-glob .env \
-              --exclude-glob .claude/ \
-              --exclude-glob .github/ \
-              --exclude-glob .vscode/ \
+              --exclude '\.git' \
+              --exclude 'virtual_env' \
+              --exclude '__pycache__' \
+              --exclude '\.pyc$' \
+              --exclude '^dump/' \
+              --exclude '^static/' \
+              --exclude '^image/' \
+              --exclude '\.env$' \
+              --exclude '\.claude' \
+              --exclude '\.github' \
+              --exclude '\.vscode' \
               ./ /home/iavest/apps_wsgi/stg/;
             quit
           "
