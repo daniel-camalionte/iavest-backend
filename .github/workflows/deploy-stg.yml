@@ -33,10 +33,15 @@ jobs:
             'ftp.login(user, password)' \
             'import io' \
             'try:' \
-            '    ftp.storlines("STOR apps_wsgi/stg/.test_deploy", io.BytesIO(b"test"))' \
-            '    print("=== STOR OK - upload direto funciona!")' \
+            '    ftp.storbinary("STOR test_visivel.txt", io.BytesIO(b"hello from github actions"))' \
+            '    print("=== STOR raiz OK")' \
             'except Exception as e:' \
-            '    print("=== STOR FALHOU:", e)' \
+            '    print("=== STOR raiz FALHOU:", e)' \
+            'try:' \
+            '    ftp.storbinary("STOR apps_wsgi/stg/test_visivel.txt", io.BytesIO(b"hello from github actions"))' \
+            '    print("=== STOR apps_wsgi/stg OK")' \
+            'except Exception as e:' \
+            '    print("=== STOR apps_wsgi/stg FALHOU:", e)' \
             'ftp.quit()' \
             > /tmp/ftp_debug.py
           python3 /tmp/ftp_debug.py
