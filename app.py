@@ -103,6 +103,9 @@ api.add_resource(appController.ContaMt5DetailController, '/contas-mt5/<int:id>')
 #Robos
 api.add_resource(appController.RobosListController, '/robos')
 
+#Etapas
+api.add_resource(appController.EtapaListController, '/etapa')
+
 #Webhook
 api.add_resource(appController.WebhookMercadoPagoController, '/webhook/mercadopago')
 api.add_resource(appController.WebhookMercadoPagoReprocessController, '/webhook/mercadopago/reprocess')

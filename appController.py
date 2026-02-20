@@ -10,4 +10,5 @@ from controller.IpnMercadopago import IpnMercadoPagoController
 from controller.Corretora import CorretoraListController
 from controller.ContaMt5 import ContaMt5ListController, ContaMt5DetailController
 from controller.Robos import RobosListController
+from controller.Etapa import EtapaListController
 
