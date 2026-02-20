@@ -24,7 +24,6 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./
           server-dir: /home/iavest/apps_wsgi/stg/
-          dangerous-clean-slate: true
           exclude: |
             **/.git*
             **/.git*/**
