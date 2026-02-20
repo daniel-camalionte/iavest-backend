@@ -173,6 +173,23 @@ erDiagram
         timestamp updated_at
     }
 
+    etapa {
+        int id_etapa PK
+        int ordem
+        varchar titulo
+        varchar descricao
+        varchar url
+        varchar video
+        timestamp created_at
+    }
+
+    etapa_usuario {
+        int id_etapa_usuario PK
+        int id_etapa FK
+        int id_usuario FK
+        timestamp created_at
+    }
+
     usuario ||--o{ assinatura : "assina"
     plano ||--o{ assinatura : "possui"
     assinatura ||--o{ pagamento : "gera"
@@ -184,6 +201,8 @@ erDiagram
     metatrader_configs ||--o{ metatrader_configs_log : "registra"
     plano ||--o{ robos : "disponibiliza"
     estrategia ||--o{ trade : "gera"
+    etapa ||--o{ etapa_usuario : "concluida por"
+    usuario ||--o{ etapa_usuario : "conclui"
 ```
 
 ## Relacionamentos (Foreign Keys)
@@ -201,6 +220,8 @@ erDiagram
 | plano_usuario | id_plano | plano | id_plano | N:1 |
 | plano_usuario | id_usuario | usuario | id_usuario | N:1 |
 | robos | id_plano | plano | id_plano | N:1 |
+| etapa_usuario | id_etapa | etapa | id_etapa | N:1 |
+| etapa_usuario | id_usuario | usuario | id_usuario | N:1 |
 
 ## Indices e Constraints
 
@@ -294,6 +315,13 @@ erDiagram
 ### plano_usuario
 - Tabela associativa entre plano e usuario
 
+### etapa
+- Etapas de onboarding/tutorial para os usuarios
+- Campos: `ordem` (sequencia), `titulo`, `descricao`, `url` (link), `video`
+
+### etapa_usuario
+- Tabela associativa que registra quais etapas cada usuario concluiu
+
 ## Fluxo de Dados
 
 ```
@@ -309,6 +337,8 @@ usuario
    |         +---> plano ---> robos
    |
    +---> plano_usuario ---> plano
+   |
+   +---> etapa_usuario ---> etapa
 
 estrategia ---> trade
 ```
