@@ -58,6 +58,10 @@
     {
       "name": "Robos",
       "description": "Robos de trading disponiveis para o usuario"
+    },
+    {
+      "name": "Etapas",
+      "description": "Etapas de onboarding do usuario"
     }
   ],
   "schemes": [
@@ -934,6 +938,29 @@
         }
       }
     },
+    "/etapa": {
+      "get": {
+        "tags": [
+          "Etapas"
+        ],
+        "summary": "Listar etapas de onboarding",
+        "description": "Retorna todas as etapas de onboarding ordenadas por ordem crescente.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de etapas retornada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/EtapasListResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
     "/corretoras": {
       "get": {
         "tags": [
@@ -1777,6 +1804,50 @@
         "created_at": {
           "type": "string",
           "example": "2026-02-10T14:30:00Z"
+        }
+      }
+    },
+    "EtapasListResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "etapas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EtapaItem"
+          }
+        }
+      }
+    },
+    "EtapaItem": {
+      "type": "object",
+      "properties": {
+        "id_etapa": {
+          "type": "integer",
+          "example": 1
+        },
+        "ordem": {
+          "type": "integer",
+          "example": 1
+        },
+        "titulo": {
+          "type": "string",
+          "example": "Configurar conta MT5"
+        },
+        "descricao": {
+          "type": "string",
+          "example": "Conecte sua conta do MetaTrader 5 para comecar a operar"
+        },
+        "url": {
+          "type": "string",
+          "example": "/configuracoes/mt5"
+        },
+        "video": {
+          "type": "string",
+          "example": "https://www.youtube.com/watch?v=abc123"
         }
       }
     },

@@ -1,10 +1,12 @@
 from flask.views import MethodView
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from rule.Etapa import EtapaRule
 from model.ControllerError import ControllerError
 
 import sentry_sdk
 
 class EtapaListController(MethodView):
+    @jwt_required
     def get(self):
         try:
             rule = EtapaRule()
