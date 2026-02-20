@@ -16,29 +16,30 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Install lftp
+        run: sudo apt-get install -y lftp
+
       - name: Upload via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USER }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./
-          server-dir: /home/iavest/apps_wsgi/stg/
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/virtual_env/**
-            **/dump/**
-            **/__pycache__/**
-            **/*.pyc
-            **/static/**
-            **/image/**
-            **/.env*
-            !**/.env.example
-            **/.claude/**
-            **/.vstags
-            **/.github/**
-            **/.vscode/**
+        run: |
+          lftp -e "
+            set ftp:ssl-allow no;
+            set net:timeout 30;
+            open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASSWORD }}' ${{ secrets.FTP_HOST }};
+            mirror -R --delete --verbose \
+              --exclude-glob .git* \
+              --exclude-glob virtual_env/ \
+              --exclude-glob dump/ \
+              --exclude-glob __pycache__/ \
+              --exclude-glob '*.pyc' \
+              --exclude-glob static/ \
+              --exclude-glob image/ \
+              --exclude-glob .env \
+              --exclude-glob .claude/ \
+              --exclude-glob .github/ \
+              --exclude-glob .vscode/ \
+              ./ /home/iavest/apps_wsgi/stg/;
+            quit
+          "
 
       - name: Reload app e atualiza Swagger
         uses: appleboy/ssh-action@v1.0.3
