@@ -31,14 +31,12 @@ jobs:
             'ftp.set_debuglevel(2)' \
             'ftp.connect(host, 21, timeout=30)' \
             'ftp.login(user, password)' \
-            'print("=== PWD:", ftp.pwd())' \
+            'import io' \
             'try:' \
-            '    ftp.cwd("apps_wsgi")' \
-            '    print("=== OK apps_wsgi, PWD:", ftp.pwd())' \
-            '    ftp.cwd("stg")' \
-            '    print("=== OK stg, PWD:", ftp.pwd())' \
+            '    ftp.storlines("STOR apps_wsgi/stg/.test_deploy", io.BytesIO(b"test"))' \
+            '    print("=== STOR OK - upload direto funciona!")' \
             'except Exception as e:' \
-            '    print("=== FALHOU:", e)' \
+            '    print("=== STOR FALHOU:", e)' \
             'ftp.quit()' \
             > /tmp/ftp_debug.py
           python3 /tmp/ftp_debug.py
