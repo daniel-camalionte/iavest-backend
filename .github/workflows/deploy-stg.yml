@@ -57,14 +57,7 @@ jobs:
             # Atualiza o basePath no swagger.json
             SWAGGER=~/apps_wsgi/stg/static/swagger.json
             if [ -f "$SWAGGER" ]; then
-              python3 -c "
-import json
-with open('$SWAGGER', 'r') as f:
-    data = json.load(f)
-data['basePath'] = '/stg'
-with open('$SWAGGER', 'w') as f:
-    json.dump(data, f, indent=2)
-"
+              python3 -c "import json; data=json.load(open('$SWAGGER')); data['basePath']='/stg'; json.dump(data, open('$SWAGGER','w'), indent=2)"
               echo "Swagger atualizado com basePath=/stg"
             else
               echo "swagger.json ainda nao existe, sera atualizado no proximo deploy"
