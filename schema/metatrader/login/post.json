@@ -1,0 +1,21 @@
+{
+  "title": "Login do Metatrader",
+  "type": "object",
+  "properties": {
+    "id_estrategia": {
+        "type":"integer",
+        "error_msg": "'id_estrategia' é obrigatório"
+    },
+    "account_number": {
+        "type":"integer",
+        "error_msg": "'account_number' é obrigatório"
+    },
+    "password": {
+        "type": "string",
+        "minLength": 6,
+        "error_msg": "'senha' mínimo de 6 caracteres"
+    }
+  },
+  "required": ["id_estrategia", "account_number", "password"],
+  "error_msg": "Os campos ['id_estrategia', 'account_number', 'password'] são obrigatórios"
+}

@@ -1,0 +1,21 @@
+{
+	"create base model": {
+		"prefix": "schema",
+		"body": [
+		  "{",
+		  "  \"title\": \"Esqueci minha senha - Alterar senha\",", 
+		  "  \"type\": \"object\",",
+          "  \"properties\": {", 
+		  "    \"nome\": {",
+          "       \"type\": \"string\",",
+          "       \"minLength\": 6,",
+          "       \"error_msg\": \"'nome' mínimo de 6 caracteres\"",
+          "      },",
+		  "    },",
+		  "    \"required\": [\"nome\"],",
+		  "    \"error_msg\": \"Os campos ['nome'] é obrigatóro\"",
+		  "}"
+		],
+		"description": "Cria a estrutura do schema"
+	}
+}

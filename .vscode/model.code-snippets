@@ -1,0 +1,28 @@
+{
+	"create base model": {
+		"prefix": "model",
+		"body": [
+          "from library.base.BaseModel import BaseModel",
+          "", 
+		  "class ${TM_FILENAME_BASE}Model(BaseModel):",
+          "", 
+          "    def __init__(self):",
+          "       super().__init__()",
+          "       pass",
+          "",
+          "    def table(self):",
+          "       return '${TM_FILENAME_BASE}'",
+          "",
+          "    def pk(self):",
+          "       return 'id_${TM_FILENAME_BASE}'",
+          "",
+          "    def fields(self):",
+          "       fields = {",
+          "                   \"id_${TM_FILENAME_BASE}\": 'id_${TM_FILENAME_BASE}'",   
+          "                }",
+          "",
+          "       return fields",
+		],
+		"description": "Cria a estrutura do rule"
+	}
+}

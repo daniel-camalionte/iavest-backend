@@ -1,0 +1,27 @@
+### QA API ###
+/virtual_env
+
+### BANCO DE DADOS ###
+/dump
+/kernel
+
+### PYCACHE ###
+__pycache__/
+*.pyc
+
+### JSON ###
+/static
+/static/swagger.json
+
+### IMAGE ###
+/image
+
+### ENV ###
+.env.*
+!.env.example
+
+### CLAUDE CODE ###
+.claude/
+
+### EDITOR ###
+.vstags

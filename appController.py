@@ -1,0 +1,13 @@
+from controller.Version import VersionController
+from controller.Login import LogoutController
+from controller.Metatrader import MetatraderLoginController, MetatraderTradeStartController, MetatraderTradeExitController
+from controller.Auth import SendCodeController, VerifyCodeController, CompleteRegistrationController
+from controller.Youtube import VideosListController
+from controller.Plano import PlanoListController
+from controller.Assinatura import AssinaturaCriarController, AssinaturaStatusController, AssinaturaCancelarController
+from controller.Webhook import WebhookMercadoPagoController, WebhookMercadoPagoReprocessController
+from controller.IpnMercadopago import IpnMercadoPagoController
+from controller.Corretora import CorretoraListController
+from controller.ContaMt5 import ContaMt5ListController, ContaMt5DetailController
+from controller.Robos import RobosListController
+

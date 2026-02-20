@@ -1,0 +1,24 @@
+{
+	"create base model": {
+		"prefix": "controller",
+		"body": [
+		  "from flask import g, request",
+		  "from flask.views import MethodView",
+		  "from rule.${TM_FILENAME_BASE} import ${TM_FILENAME_BASE}Rule",
+		  "from library.Funcao import Funcao",
+		  "from model.ControllerError import ControllerError",
+		  "", 
+		  "class ${TM_FILENAME_BASE}Controller(MethodView):",
+		  "    def get(self):",
+		  "       try:",
+		  "           rule${TM_FILENAME_BASE} = ${TM_FILENAME_BASE}Rule()",
+		  "           retorno = rule${TM_FILENAME_BASE}.find()",
+		  "           return retorno",
+		  "",	
+		  "       except Exception as e:",
+		  "           msg = ControllerError().default(e)",
+		  "           return msg, 500"
+		],
+		"description": "Cria a estrutura do controller"
+	}
+}

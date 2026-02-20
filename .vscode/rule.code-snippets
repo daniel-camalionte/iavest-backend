@@ -1,0 +1,21 @@
+{
+	"create base model": {
+		"prefix": "rule",
+		"body": [
+		  "from model.${TM_FILENAME_BASE} import ${TM_FILENAME_BASE}Model",
+		  "", 
+		  "class ${TM_FILENAME_BASE}Rule():",
+          "", 
+		  "    def __init__(self):",
+          "       pass",
+          "",
+          "    def find(self):",
+		  "       mod${TM_FILENAME_BASE} = ${TM_FILENAME_BASE}Model()",
+		  "       retorno = mod${TM_FILENAME_BASE}.find()",
+		  "       if retorno:",
+		  "           return retorno, 200",
+		  "       return {'msg': 'nenhum registro encontrado'}, 404"
+		],
+		"description": "Cria a estrutura do rule"
+	}
+}

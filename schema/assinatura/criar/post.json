@@ -1,0 +1,13 @@
+{
+    "title": "Criar assinatura",
+    "type": "object",
+    "properties": {
+        "plano_id": {
+            "type": "integer",
+            "minimum": 1,
+            "error_msg": "'plano_id' inválido"
+        }
+    },
+    "required": ["plano_id"],
+    "error_msg": "O campo ['plano_id'] é obrigatório"
+}
