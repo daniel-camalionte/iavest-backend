@@ -37,7 +37,7 @@ jobs:
               --exclude '\.claude' \
               --exclude '\.github' \
               --exclude '\.vscode' \
-              ./ /home/iavest/apps_wsgi/stg/;
+              ./ /apps_wsgi/stg/;
             quit
           "
 
