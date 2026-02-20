@@ -25,6 +25,14 @@ jobs:
             set ftp:ssl-allow no;
             set net:timeout 30;
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASSWORD }}' ${{ secrets.FTP_HOST }};
+            pwd;
+            ls;
+            quit
+          "
+          lftp -e "
+            set ftp:ssl-allow no;
+            set net:timeout 30;
+            open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASSWORD }}' ${{ secrets.FTP_HOST }};
             mirror -R --delete --verbose \
               --exclude '\.git' \
               --exclude 'virtual_env' \
