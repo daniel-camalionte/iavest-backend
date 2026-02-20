@@ -25,7 +25,8 @@ jobs:
             set ftp:ssl-allow no;
             set net:timeout 30;
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASSWORD }}' ${{ secrets.FTP_HOST }};
-            mirror -R --delete --verbose \
+            cd /home/iavest/apps_wsgi/stg;
+            mirror -R --verbose \
               --exclude-glob .git \
               --exclude-glob .git/ \
               --exclude-glob virtual_env/ \
@@ -38,6 +39,6 @@ jobs:
               --exclude-glob .claude/ \
               --exclude-glob .github/ \
               --exclude-glob .vscode/ \
-              ./ /home/iavest/apps_wsgi/stg/;
+              . .;
             quit
           "
