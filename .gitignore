@@ -1,10 +1,6 @@
 ### QA API ###
 /virtual_env
 
-### BANCO DE DADOS ###
-/dump
-/kernel
-
 ### PYCACHE ###
 __pycache__/
 *.pyc
