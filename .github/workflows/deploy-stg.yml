@@ -25,7 +25,6 @@ jobs:
             set ftp:ssl-allow no;
             set net:timeout 30;
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASSWORD }}' ${{ secrets.FTP_HOST }};
-            mkdir -p /home/iavest/apps_wsgi/stg;
             mirror -R --delete --verbose \
               --exclude '\.git' \
               --exclude 'virtual_env' \
