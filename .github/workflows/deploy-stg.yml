@@ -25,6 +25,7 @@ jobs:
             set ftp:ssl-force yes;
             set ftp:ssl-protect-data yes;
             set ssl:verify-certificate no;
+            set ftp:home /;
             set net:timeout 30;
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASSWORD }}' ${{ secrets.FTP_HOST }};
             mirror -R --verbose \
