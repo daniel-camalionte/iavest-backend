@@ -105,6 +105,7 @@ api.add_resource(appController.RobosListController, '/robos')
 
 #Etapas
 api.add_resource(appController.EtapaListController, '/etapa')
+api.add_resource(appController.EtapaUsuarioController, '/etapa/usuario')
 
 #Webhook
 api.add_resource(appController.WebhookMercadoPagoController, '/webhook/mercadopago')
