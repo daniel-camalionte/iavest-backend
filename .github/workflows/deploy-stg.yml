@@ -1,0 +1,70 @@
+name: Deploy STG
+
+on:
+  push:
+    branches:
+      - stg
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: stg
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Upload via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./
+          server-dir: /apps_wsgi/stg/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/virtual_env/**
+            **/dump/**
+            **/__pycache__/**
+            **/*.pyc
+            **/static/**
+            **/image/**
+            **/.env*
+            !**/.env.example
+            **/.claude/**
+            **/.vstags
+            **/.github/**
+            **/.vscode/**
+
+      - name: Reload app e atualiza Swagger
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          script: |
+            # Reinicia a aplicação
+            touch ~/apps_wsgi/stg.wsgi
+
+            # Aguarda o app reiniciar e gerar o swagger.json
+            sleep 5
+
+            # Atualiza o basePath no swagger.json
+            SWAGGER=~/apps_wsgi/stg/static/swagger.json
+            if [ -f "$SWAGGER" ]; then
+              python3 -c "
+import json
+with open('$SWAGGER', 'r') as f:
+    data = json.load(f)
+data['basePath'] = '/stg'
+with open('$SWAGGER', 'w') as f:
+    json.dump(data, f, indent=2)
+"
+              echo "Swagger atualizado com basePath=/stg"
+            else
+              echo "swagger.json ainda nao existe, sera atualizado no proximo deploy"
+            fi
