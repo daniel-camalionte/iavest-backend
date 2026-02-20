@@ -16,22 +16,30 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Install lftp
-        run: sudo apt-get install -y lftp
-
-      - name: Upload via FTP
+      - name: Debug FTP
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASS: ${{ secrets.FTP_PASSWORD }}
         run: |
-          lftp -e "
-            set ftp:ssl-allow yes;
-            set ssl:verify-certificate no;
-            set net:timeout 30;
-            open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASSWORD }}' ${{ secrets.FTP_HOST }};
-            cd /;
-            pwd;
-            ls;
-            cd apps_wsgi;
-            pwd;
-            cd stg;
-            pwd;
-            quit
-          "
+          python3 << 'PYEOF'
+import ftplib, os
+host = os.environ['FTP_HOST']
+user = os.environ['FTP_USER']
+password = os.environ['FTP_PASS']
+
+ftp = ftplib.FTP()
+ftp.set_debuglevel(2)
+ftp.connect(host, 21, timeout=30)
+ftp.login(user, password)
+print('=== PWD:', ftp.pwd())
+print('=== Tentando cd apps_wsgi...')
+try:
+    ftp.cwd('apps_wsgi')
+    print('=== OK! PWD agora:', ftp.pwd())
+    ftp.cwd('stg')
+    print('=== OK! PWD agora:', ftp.pwd())
+except Exception as e:
+    print('=== FALHOU:', e)
+ftp.quit()
+PYEOF
