@@ -1,4 +1,5 @@
 from controller.Version import VersionController
+from controller.Teste import TesteController
 from controller.Login import LogoutController
 from controller.Metatrader import MetatraderLoginController, MetatraderTradeStartController, MetatraderTradeExitController
 from controller.Auth import SendCodeController, VerifyCodeController, CompleteRegistrationController

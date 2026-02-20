@@ -1,0 +1,1859 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "description": "API REST do IAVest - Ambiente de STG (Staging)",
+    "version": "1.0.0",
+    "title": "IAVest",
+    "contact": {
+      "email": "contato@iavest.com.br"
+    }
+  },
+  "host": "",
+  "basePath": "/",
+  "tags": [
+    {
+      "name": "Teste",
+      "description": "Rota de teste do pipeline de deploy"
+    },
+    {
+      "name": "Version",
+      "description": "Informacoes da versao da API"
+    },
+    {
+      "name": "Logout",
+      "description": "Logout de usuarios"
+    },
+    {
+      "name": "Metatrader",
+      "description": "Operacoes do Metatrader"
+    },
+    {
+      "name": "Auth",
+      "description": "Autenticacao por codigo"
+    },
+    {
+      "name": "YouTube",
+      "description": "Videos do canal YouTube"
+    },
+    {
+      "name": "Planos",
+      "description": "Planos de assinatura"
+    },
+    {
+      "name": "Assinatura",
+      "description": "Gerenciamento de assinaturas via Mercado Pago"
+    },
+    {
+      "name": "Webhook",
+      "description": "Webhooks de notificacao de servicos externos"
+    },
+    {
+      "name": "IPN",
+      "description": "Notificacoes IPN (Instant Payment Notification) do Mercado Pago"
+    },
+    {
+      "name": "Corretoras",
+      "description": "Corretoras disponiveis"
+    },
+    {
+      "name": "Contas MT5",
+      "description": "Gerenciamento de contas Metatrader 5"
+    },
+    {
+      "name": "Robos",
+      "description": "Robos de trading disponiveis para o usuario"
+    }
+  ],
+  "schemes": [
+    "https",
+    "http"
+  ],
+  "paths": {
+    "/teste": {
+      "get": {
+        "tags": [
+          "Teste"
+        ],
+        "summary": "Teste do pipeline",
+        "description": "Rota simples para validar o deploy automatico via GitHub Actions.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "example": "teste pipeline"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "tags": [
+          "Version"
+        ],
+        "summary": "Versao da API",
+        "description": "Exibe a versao e a data/hora da ultima alteracao realizada nessa rota",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "string",
+                  "example": "1.0.0"
+                },
+                "datetime": {
+                  "type": "string",
+                  "example": "2026-02-10 14:30:00"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/logout": {
+      "post": {
+        "tags": [
+          "Logout"
+        ],
+        "summary": "Logout",
+        "description": "Realiza logout do usuario e invalida o token JWT",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Logout realizado com sucesso"
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/metatrader/login": {
+      "post": {
+        "tags": [
+          "Metatrader"
+        ],
+        "summary": "Login do Metatrader",
+        "description": "Realiza login na conta do Metatrader vinculando a uma estrategia. Aceita JSON como string.",
+        "consumes": [
+          "application/json",
+          "text/plain"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Dados de login do Metatrader",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/MetatraderLoginRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Login realizado com sucesso",
+            "schema": {
+              "$ref": "#/definitions/MetatraderLoginResponse"
+            }
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "422": {
+            "description": "Dados de entrada invalidos"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/metatrader/trade/start": {
+      "post": {
+        "tags": [
+          "Metatrader"
+        ],
+        "summary": "Iniciar Trade",
+        "description": "Registra uma operacao day trade. Aceita JSON como string ou formato payload={json}.",
+        "consumes": [
+          "application/json",
+          "text/plain",
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Dados da operacao trade",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/MetatraderTradeStartRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Trade registrado com sucesso",
+            "schema": {
+              "$ref": "#/definitions/MetatraderTradeStartResponse"
+            }
+          },
+          "422": {
+            "description": "Dados de entrada invalidos"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/metatrader/trade/exit": {
+      "post": {
+        "tags": [
+          "Metatrader"
+        ],
+        "summary": "Fechar Trade",
+        "description": "Fecha uma operacao day trade, calculando profit/loss. Localiza pelo account_number e index_exit IS NULL. Aceita JSON como string ou formato payload={json}.",
+        "consumes": [
+          "application/json",
+          "text/plain",
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Dados para fechar o trade",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/MetatraderTradeExitRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trade fechado com sucesso",
+            "schema": {
+              "$ref": "#/definitions/MetatraderTradeExitResponse"
+            }
+          },
+          "404": {
+            "description": "Trade nao encontrado"
+          },
+          "422": {
+            "description": "Dados de entrada invalidos"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/auth/send-code": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Enviar codigo de verificacao",
+        "description": "Envia um codigo de 6 digitos para o email do usuario cadastrado. O codigo expira em 10 minutos.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Email do usuario",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SendCodeRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Codigo enviado com sucesso",
+            "schema": {
+              "$ref": "#/definitions/SendCodeResponse"
+            }
+          },
+          "400": {
+            "description": "Email invalido",
+            "schema": {
+              "$ref": "#/definitions/SendCodeErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/auth/verify-code": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Verificar codigo",
+        "description": "Valida o codigo de 6 digitos e retorna token temporario para continuar o cadastro. Token valido por 30 minutos.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Email e codigo de verificacao",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/VerifyCodeRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Codigo validado com sucesso",
+            "schema": {
+              "$ref": "#/definitions/VerifyCodeResponse"
+            }
+          },
+          "400": {
+            "description": "Codigo invalido ou expirado",
+            "schema": {
+              "$ref": "#/definitions/VerifyCodeErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/auth/complete-registration": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Completar cadastro",
+        "description": "Recebe os dados completos do usuario e finaliza o cadastro. Requer token temporario no header Authorization.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token temporario (Bearer temp_token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Dados do usuario",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/CompleteRegistrationRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cadastro concluido com sucesso",
+            "schema": {
+              "$ref": "#/definitions/CompleteRegistrationResponse"
+            }
+          },
+          "400": {
+            "description": "Dados invalidos",
+            "schema": {
+              "$ref": "#/definitions/CompleteRegistrationErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Token temporario invalido ou expirado"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/planos": {
+      "get": {
+        "tags": [
+          "Planos"
+        ],
+        "summary": "Listar planos disponíveis",
+        "description": "Retorna a lista de planos de assinatura ativos para checkout via Mercado Pago.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de planos retornada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/PlanosListResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/assinatura/status": {
+      "get": {
+        "tags": [
+          "Assinatura"
+        ],
+        "summary": "Status da assinatura",
+        "description": "Retorna o status da assinatura ativa do usuario logado.",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status retornado com sucesso",
+            "schema": {
+              "$ref": "#/definitions/AssinaturaStatusResponse"
+            }
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/assinatura/criar": {
+      "post": {
+        "tags": [
+          "Assinatura"
+        ],
+        "summary": "Criar assinatura",
+        "description": "Cria uma assinatura no Mercado Pago e retorna a URL de checkout. Requer autenticacao JWT.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "description": "ID do plano escolhido",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/AssinaturaCriarRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Assinatura criada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/AssinaturaCriarResponse"
+            }
+          },
+          "400": {
+            "description": "Plano invalido",
+            "schema": {
+              "$ref": "#/definitions/AssinaturaErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "409": {
+            "description": "Usuario ja possui assinatura ativa",
+            "schema": {
+              "$ref": "#/definitions/AssinaturaErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/assinatura/cancelar": {
+      "post": {
+        "tags": [
+          "Assinatura"
+        ],
+        "summary": "Cancelar assinatura",
+        "description": "Cancela a assinatura ativa do usuario no Mercado Pago e atualiza o status no banco.",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Assinatura cancelada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/AssinaturaCancelarResponse"
+            }
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "404": {
+            "description": "Nenhuma assinatura ativa encontrada",
+            "schema": {
+              "$ref": "#/definitions/AssinaturaErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/webhook/mercadopago": {
+      "post": {
+        "tags": [
+          "Webhook"
+        ],
+        "summary": "Webhook Mercado Pago",
+        "description": "Recebe notificacoes de pagamento do Mercado Pago. Atualiza status da assinatura e registra pagamentos. Acoes tratadas: payment.created (pending), payment.approved (active), payment.rejected (pending).",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Notificacao do Mercado Pago",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/WebhookMercadoPagoRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notificacao processada",
+            "schema": {
+              "$ref": "#/definitions/WebhookMercadoPagoResponse"
+            }
+          }
+        }
+      }
+    },
+    "/webhook/mercadopago/reprocess": {
+      "post": {
+        "tags": [
+          "Webhook"
+        ],
+        "summary": "Reprocessar Webhook Mercado Pago",
+        "description": "Reprocessa uma notificacao de webhook previamente armazenada na tabela webhook_mercadopago. Busca o registro pelo id_webhook, incrementa o contador de tentativas e executa o processamento novamente com o payload original.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "ID do webhook a reprocessar",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/WebhookMercadoPagoReprocessRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Webhook reprocessado com sucesso",
+            "schema": {
+              "$ref": "#/definitions/WebhookMercadoPagoResponse"
+            }
+          },
+          "400": {
+            "description": "id_webhook nao informado ou payload invalido",
+            "schema": {
+              "$ref": "#/definitions/WebhookMercadoPagoReprocessErrorResponse"
+            }
+          },
+          "404": {
+            "description": "Webhook nao encontrado",
+            "schema": {
+              "$ref": "#/definitions/WebhookMercadoPagoReprocessErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/ipn/mercadopago": {
+      "post": {
+        "tags": [
+          "IPN"
+        ],
+        "summary": "IPN Mercado Pago",
+        "description": "Recebe notificacoes IPN (Instant Payment Notification) do Mercado Pago via query string. Armazena a notificacao na tabela ipn_mercadopago, busca os detalhes na API do MP e processa o pagamento/assinatura. Topics: payment, merchant_order, chargebacks.",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "topic",
+            "in": "query",
+            "description": "Tipo da notificacao (payment, merchant_order, chargebacks)",
+            "required": true,
+            "type": "string",
+            "enum": ["payment", "merchant_order", "chargebacks"]
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "description": "ID do recurso no Mercado Pago (ex: ID do pagamento ou da merchant_order)",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notificacao recebida e processada",
+            "schema": {
+              "$ref": "#/definitions/IpnMercadoPagoResponse"
+            }
+          }
+        }
+      }
+    },
+    "/contas-mt5": {
+      "get": {
+        "tags": [
+          "Contas MT5"
+        ],
+        "summary": "Listar contas MT5",
+        "description": "Lista contas MT5 cadastradas pelo usuario autenticado. Suporta filtros por account e account_number, com paginacao de 10 em 10.",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "description": "Filtrar por tipo de conta (ex: REAL, DEMO)",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "account_number",
+            "in": "query",
+            "description": "Filtrar por numero da conta",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Numero da pagina (default: 1)",
+            "required": false,
+            "type": "integer",
+            "default": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de contas retornada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/ContasMt5ListResponse"
+            }
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Contas MT5"
+        ],
+        "summary": "Criar conta MT5",
+        "description": "Cria nova conta MT5 para o usuario autenticado. A senha e gerada automaticamente com 10 caracteres alfanumericos.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Dados da conta MT5",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ContaMt5CreateRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Conta criada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/ContaMt5CreateResponse"
+            }
+          },
+          "400": {
+            "description": "Dados obrigatorios nao informados"
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/contas-mt5/{id}": {
+      "put": {
+        "tags": [
+          "Contas MT5"
+        ],
+        "summary": "Atualizar conta MT5",
+        "description": "Atualiza os dados de uma conta MT5 do usuario autenticado.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID da conta MT5",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Dados da conta MT5 para atualizar",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ContaMt5UpdateRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conta atualizada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/ContaMt5UpdateResponse"
+            }
+          },
+          "400": {
+            "description": "Dados invalidos"
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "404": {
+            "description": "Conta MT5 nao encontrada"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Contas MT5"
+        ],
+        "summary": "Remover conta MT5",
+        "description": "Remove uma conta MT5 do usuario autenticado.",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "ID da conta MT5",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Conta removida com sucesso",
+            "schema": {
+              "$ref": "#/definitions/ContaMt5DeleteResponse"
+            }
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "404": {
+            "description": "Conta MT5 nao encontrada"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/robos": {
+      "get": {
+        "tags": [
+          "Robos"
+        ],
+        "summary": "Listar robos disponiveis",
+        "description": "Retorna os robos de trading disponiveis para o usuario autenticado, com base no plano da assinatura ativa.",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de robos retornada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/RobosListResponse"
+            }
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "404": {
+            "description": "Nenhum robo disponivel ou assinatura inativa"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/corretoras": {
+      "get": {
+        "tags": [
+          "Corretoras"
+        ],
+        "summary": "Listar corretoras disponiveis",
+        "description": "Retorna a lista de corretoras ativas para uso em combobox. Corretoras em destaque aparecem primeiro.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de corretoras retornada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/CorretorasListResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/trpc/videos.list": {
+      "post": {
+        "tags": [
+          "YouTube"
+        ],
+        "summary": "Listar videos do canal",
+        "description": "Retorna os ultimos 30 videos do canal YouTube @arcmatrixfinanceira no formato tRPC.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Request tRPC padrao",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/VideosListRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de videos retornada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/VideosListResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "MetatraderLoginRequest": {
+      "type": "string",
+      "example": "{\"id_estrategia\": 1, \"account_number\": 12345678, \"password\": \"senha123\"}",
+      "description": "JSON string contendo id_estrategia, account_number e password"
+    },
+    "MetatraderLoginResponse": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "example": "Login realizado com sucesso"
+        },
+        "id_metatrader_configs": {
+          "type": "integer",
+          "example": 1
+        }
+      }
+    },
+    "MetatraderTradeStartRequest": {
+      "type": "string",
+      "example": "{\"account_number\": \"12345678\", \"id_estrategia\": 1, \"type\": \"buy\", \"index_start\": 180.624, \"contract\": 1}",
+      "description": "JSON string contendo account_number, id_estrategia, type (buy/sell), index_start (decimal 3 casas) e contract"
+    },
+    "MetatraderTradeStartResponse": {
+      "type": "object",
+      "properties": {
+        "id_trade": {
+          "type": "integer",
+          "example": 1
+        }
+      }
+    },
+    "MetatraderTradeExitRequest": {
+      "type": "string",
+      "example": "{\"account_number\": \"12345678\", \"id_estrategia\": 1, \"index_exit\": 181.624, \"profit_loss\": 55.22}",
+      "description": "JSON string contendo account_number, id_estrategia, index_exit e profit_loss (valor ja calculado, pode ser string ou number). O trade e localizado por account_number e id_estrategia onde index_exit IS NULL"
+    },
+    "MetatraderTradeExitResponse": {
+      "type": "object",
+      "properties": {
+        "id_trade": {
+          "type": "integer",
+          "example": 1
+        },
+        "operation": {
+          "type": "string",
+          "enum": ["profit", "loss"],
+          "example": "profit"
+        },
+        "profit_loss": {
+          "type": "number",
+          "example": 25.50
+        }
+      }
+    },
+    "SendCodeRequest": {
+      "type": "object",
+      "required": [
+        "email"
+      ],
+      "properties": {
+        "email": {
+          "type": "string",
+          "example": "usuario@exemplo.com"
+        }
+      }
+    },
+    "SendCodeResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Codigo enviado com sucesso"
+        },
+        "expires_in": {
+          "type": "integer",
+          "example": 600
+        }
+      }
+    },
+    "SendCodeErrorResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": false
+        },
+        "message": {
+          "type": "string",
+          "example": "Email invalido"
+        }
+      }
+    },
+    "VerifyCodeRequest": {
+      "type": "object",
+      "required": [
+        "email",
+        "code"
+      ],
+      "properties": {
+        "email": {
+          "type": "string",
+          "example": "usuario@exemplo.com"
+        },
+        "code": {
+          "type": "string",
+          "example": "123456"
+        }
+      }
+    },
+    "VerifyCodeResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Codigo validado com sucesso"
+        },
+        "token": {
+          "type": "string",
+          "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        },
+        "requires_registration": {
+          "type": "boolean",
+          "example": true
+        },
+        "user": {
+          "type": "object",
+          "description": "Retornado apenas se requires_registration = false",
+          "properties": {
+            "id_usuario": {
+              "type": "integer",
+              "example": 1
+            },
+            "email": {
+              "type": "string",
+              "example": "usuario@exemplo.com"
+            },
+            "nome": {
+              "type": "string",
+              "example": "Joao Silva"
+            }
+          }
+        }
+      }
+    },
+    "VerifyCodeErrorResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": false
+        },
+        "message": {
+          "type": "string",
+          "example": "Codigo invalido ou expirado"
+        }
+      }
+    },
+    "CompleteRegistrationRequest": {
+      "type": "object",
+      "required": [
+        "nome",
+        "email",
+        "cpf_cnpj",
+        "ddd",
+        "telefone"
+      ],
+      "properties": {
+        "nome": {
+          "type": "string",
+          "example": "Joao Silva"
+        },
+        "email": {
+          "type": "string",
+          "example": "usuario@exemplo.com"
+        },
+        "cpf_cnpj": {
+          "type": "string",
+          "example": "123.456.789-00"
+        },
+        "ddd": {
+          "type": "string",
+          "example": "11"
+        },
+        "telefone": {
+          "type": "string",
+          "example": "987654321"
+        }
+      }
+    },
+    "CompleteRegistrationResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Cadastro concluido com sucesso"
+        },
+        "token": {
+          "type": "string",
+          "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        },
+        "user": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "example": 1
+            },
+            "nome": {
+              "type": "string",
+              "example": "Joao Silva"
+            },
+            "email": {
+              "type": "string",
+              "example": "usuario@exemplo.com"
+            },
+            "cpf_cnpj": {
+              "type": "string",
+              "example": "123.456.789-00"
+            },
+            "ddd": {
+              "type": "string",
+              "example": "11"
+            },
+            "telefone": {
+              "type": "string",
+              "example": "987654321"
+            },
+            "created_at": {
+              "type": "string",
+              "example": "2026-02-06T15:30:00Z"
+            }
+          }
+        }
+      }
+    },
+    "CompleteRegistrationErrorResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": false
+        },
+        "message": {
+          "type": "string",
+          "example": "CPF/CNPJ invalido"
+        }
+      }
+    },
+    "VideosListRequest": {
+      "type": "object",
+      "properties": {
+        "0": {
+          "type": "object",
+          "properties": {
+            "json": {
+              "type": "string",
+              "example": null
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "example": ["undefined"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "VideosListResponse": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "json": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/VideoItem"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "WebhookMercadoPagoRequest": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "example": "payment.created"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "example": "12345678"
+            }
+          }
+        }
+      }
+    },
+    "WebhookMercadoPagoResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        }
+      }
+    },
+    "WebhookMercadoPagoReprocessRequest": {
+      "type": "object",
+      "required": [
+        "id_webhook"
+      ],
+      "properties": {
+        "id_webhook": {
+          "type": "integer",
+          "example": 1,
+          "description": "ID do registro na tabela webhook_mercadopago"
+        }
+      }
+    },
+    "WebhookMercadoPagoReprocessErrorResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": false
+        },
+        "message": {
+          "type": "string",
+          "example": "Webhook nao encontrado"
+        }
+      }
+    },
+    "IpnMercadoPagoResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        }
+      }
+    },
+    "AssinaturaCancelarResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Assinatura cancelada com sucesso"
+        }
+      }
+    },
+    "AssinaturaStatusResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "tem_assinatura": {
+          "type": "boolean",
+          "example": true
+        },
+        "assinatura": {
+          "type": "object",
+          "description": "Presente apenas quando tem_assinatura = true",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "example": 15
+            },
+            "plano_nome": {
+              "type": "string",
+              "example": "Plano Pro"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["pending", "active", "paused", "cancelled"],
+              "example": "active"
+            },
+            "data_inicio": {
+              "type": "string",
+              "example": "2026-02-01 10:00:00"
+            },
+            "data_proxima_cobranca": {
+              "type": "string",
+              "example": "2026-03-01 10:00:00"
+            },
+            "recursos": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "example": ["Robô Scalper", "Robô Swing", "Robô Day Trade"]
+            }
+          }
+        }
+      }
+    },
+    "AssinaturaCriarRequest": {
+      "type": "object",
+      "required": [
+        "plano_id"
+      ],
+      "properties": {
+        "plano_id": {
+          "type": "integer",
+          "example": 2
+        }
+      }
+    },
+    "AssinaturaCriarResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "checkout_url": {
+          "type": "string",
+          "example": "https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=abc123"
+        },
+        "assinatura_id": {
+          "type": "integer",
+          "example": 15
+        }
+      }
+    },
+    "AssinaturaErrorResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": false
+        },
+        "message": {
+          "type": "string",
+          "example": "Plano invalido"
+        }
+      }
+    },
+    "CorretorasListResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "corretoras": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CorretoraItem"
+          }
+        }
+      }
+    },
+    "CorretoraItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "example": 2
+        },
+        "nome": {
+          "type": "string",
+          "example": "Clear Corretora"
+        },
+        "codigo_b3": {
+          "type": "string",
+          "example": "008"
+        },
+        "destaque": {
+          "type": "boolean",
+          "example": true
+        }
+      }
+    },
+    "PlanosListResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "planos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PlanoItem"
+          }
+        }
+      }
+    },
+    "PlanoItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "example": 1
+        },
+        "nome": {
+          "type": "string",
+          "example": "Plano Básico"
+        },
+        "descricao": {
+          "type": "string",
+          "example": "Acesso a 1 robô de trading"
+        },
+        "preco_mensal": {
+          "type": "number",
+          "format": "double",
+          "example": 97.00
+        },
+        "recursos": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "example": ["Robô Scalper", "Suporte por email"]
+        },
+        "destaque": {
+          "type": "boolean",
+          "example": false
+        }
+      }
+    },
+    "RobosListResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "robos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RoboItem"
+          }
+        }
+      }
+    },
+    "RoboItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "example": 1
+        },
+        "nome": {
+          "type": "string",
+          "example": "Robo Scalper"
+        },
+        "descricao": {
+          "type": "string",
+          "example": "Robo de scalping automatico"
+        },
+        "versao": {
+          "type": "string",
+          "example": "1.0.0"
+        },
+        "arquivo_url": {
+          "type": "string",
+          "example": "https://iavest.com.br/robos/scalper-v1.ex5"
+        },
+        "created_at": {
+          "type": "string",
+          "example": "2026-02-10 14:30:00"
+        }
+      }
+    },
+    "ContaMt5CreateRequest": {
+      "type": "object",
+      "required": [
+        "id_corretora",
+        "account",
+        "account_number"
+      ],
+      "properties": {
+        "id_corretora": {
+          "type": "integer",
+          "example": 2
+        },
+        "account": {
+          "type": "string",
+          "example": "REAL"
+        },
+        "account_number": {
+          "type": "string",
+          "example": "87654321"
+        },
+        "status": {
+          "type": "string",
+          "example": "active",
+          "description": "Status da conta (default: active)"
+        }
+      }
+    },
+    "ContaMt5CreateResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "conta": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "example": 790
+            },
+            "account_number": {
+              "type": "string",
+              "example": "87654321"
+            },
+            "password": {
+              "type": "string",
+              "example": "XyZ789Abc0"
+            },
+            "created_at": {
+              "type": "string",
+              "example": "2026-02-11 10:15:00"
+            }
+          }
+        }
+      }
+    },
+    "ContaMt5DeleteResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Conta MT5 removida com sucesso"
+        }
+      }
+    },
+    "ContaMt5UpdateRequest": {
+      "type": "object",
+      "properties": {
+        "id_corretora": {
+          "type": "integer",
+          "example": 2
+        },
+        "account": {
+          "type": "string",
+          "example": "REAL"
+        },
+        "account_number": {
+          "type": "string",
+          "example": "87654321"
+        },
+        "password": {
+          "type": "string",
+          "example": "xxxxxx"
+        },
+        "status": {
+          "type": "string",
+          "example": "active"
+        }
+      }
+    },
+    "ContaMt5UpdateResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Conta MT5 atualizada com sucesso"
+        }
+      }
+    },
+    "ContasMt5ListResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "contas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ContaMt5Item"
+          }
+        },
+        "total": {
+          "type": "integer",
+          "example": 3
+        },
+        "page": {
+          "type": "integer",
+          "example": 1
+        },
+        "per_page": {
+          "type": "integer",
+          "example": 10
+        }
+      }
+    },
+    "ContaMt5Item": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "example": 3
+        },
+        "id_corretora": {
+          "type": "integer",
+          "example": 3
+        },
+        "nome_corretora": {
+          "type": "string",
+          "example": "Clear Corretora"
+        },
+        "id_symbols": {
+          "type": "integer",
+          "example": 1
+        },
+        "server": {
+          "type": "string",
+          "example": "WINM22",
+          "description": "Ticker do ativo (alias de symbols.ticker)"
+        },
+        "account": {
+          "type": "string",
+          "example": "REAL"
+        },
+        "account_number": {
+          "type": "string",
+          "example": "12345678"
+        },
+        "password": {
+          "type": "string",
+          "example": "Abc123XyZ!"
+        },
+        "status": {
+          "type": "string",
+          "example": "active"
+        },
+        "created_at": {
+          "type": "string",
+          "example": "2026-02-10T14:30:00Z"
+        }
+      }
+    },
+    "VideoItem": {
+      "type": "object",
+      "properties": {
+        "videoId": {
+          "type": "string",
+          "example": "dQw4w9WgXcQ"
+        },
+        "title": {
+          "type": "string",
+          "example": "Titulo do video"
+        },
+        "thumbnails": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "example": "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+              },
+              "width": {
+                "type": "integer",
+                "example": 480
+              },
+              "height": {
+                "type": "integer",
+                "example": 360
+              }
+            }
+          }
+        },
+        "viewCount": {
+          "type": "integer",
+          "example": 1000
+        },
+        "publishedTimeText": {
+          "type": "string",
+          "example": ""
+        },
+        "lengthSeconds": {
+          "type": "integer",
+          "example": 600
+        }
+      }
+    }
+  }
+}

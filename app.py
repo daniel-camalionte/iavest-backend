@@ -63,6 +63,9 @@ api = Api(app)
 #Version
 api.add_resource(appController.VersionController, '/version')
 
+#Teste
+api.add_resource(appController.TesteController, '/teste')
+
 #Login
 api.add_resource(appController.LogoutController, '/logout')
 
