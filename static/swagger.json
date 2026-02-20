@@ -12,10 +12,6 @@
   "basePath": "/",
   "tags": [
     {
-      "name": "Teste",
-      "description": "Rota de teste do pipeline de deploy"
-    },
-    {
       "name": "Version",
       "description": "Informacoes da versao da API"
     },
@@ -69,32 +65,6 @@
     "http"
   ],
   "paths": {
-    "/teste": {
-      "get": {
-        "tags": [
-          "Teste"
-        ],
-        "summary": "Teste do pipeline",
-        "description": "Rota simples para validar o deploy automatico via GitHub Actions.",
-        "produces": [
-          "application/json"
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "message": {
-                  "type": "string",
-                  "example": "teste pipeline"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/version": {
       "get": {
         "tags": [

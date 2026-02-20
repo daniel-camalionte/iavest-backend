@@ -3,14 +3,15 @@
 
 ### BANCO DE DADOS ###
 /dump
+/kernel
 
 ### PYCACHE ###
 __pycache__/
 *.pyc
 
 ### JSON ###
-/static/*
-!/static/swagger.json
+/static
+/static/swagger.json
 
 ### IMAGE ###
 /image
@@ -18,9 +19,3 @@ __pycache__/
 ### ENV ###
 .env.*
 !.env.example
-
-### CLAUDE CODE ###
-.claude/
-
-### EDITOR ###
-.vstags
