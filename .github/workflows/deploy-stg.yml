@@ -25,6 +25,7 @@ jobs:
             set ftp:ssl-allow no;
             set net:timeout 30;
             open -u '${{ secrets.FTP_USER }}','${{ secrets.FTP_PASSWORD }}' ${{ secrets.FTP_HOST }};
+            mkdir -p /home/iavest/apps_wsgi/stg;
             mirror -R --delete --verbose \
               --exclude '\.git' \
               --exclude 'virtual_env' \
@@ -41,24 +42,3 @@ jobs:
             quit
           "
 
-      - name: Reload app e atualiza Swagger
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          script: |
-            # Reinicia a aplicação
-            touch ~/apps_wsgi/stg.wsgi
-
-            # Aguarda o app reiniciar e gerar o swagger.json
-            sleep 5
-
-            # Atualiza o basePath no swagger.json
-            SWAGGER=~/apps_wsgi/stg/static/swagger.json
-            if [ -f "$SWAGGER" ]; then
-              python3 -c "import json; data=json.load(open('$SWAGGER')); data['basePath']='/stg'; json.dump(data, open('$SWAGGER','w'), indent=2)"
-              echo "Swagger atualizado com basePath=/stg"
-            else
-              echo "swagger.json ainda nao existe, sera atualizado no proximo deploy"
-            fi
