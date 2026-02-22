@@ -948,12 +948,112 @@
         "produces": [
           "application/json"
         ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          }
+        ],
         "responses": {
           "200": {
             "description": "Lista de etapas retornada com sucesso",
             "schema": {
               "$ref": "#/definitions/EtapasListResponse"
             }
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/etapa/usuario": {
+      "get": {
+        "tags": [
+          "Etapas"
+        ],
+        "summary": "Listar etapas concluidas pelo usuario",
+        "description": "Retorna a lista de id_etapa que o usuario autenticado ja concluiu.",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista retornada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/EtapaUsuarioListResponse"
+            }
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Etapas"
+        ],
+        "summary": "Registrar etapa concluida",
+        "description": "Registra uma etapa como concluida pelo usuario autenticado. Nao permite duplicidade (id_etapa + id_usuario).",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/EtapaUsuarioRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Etapa registrada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/EtapaUsuarioCreateResponse"
+            }
+          },
+          "400": {
+            "description": "id_etapa nao informado"
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "409": {
+            "description": "Etapa ja registrada para este usuario"
           },
           "500": {
             "description": "Internal Server Error"
@@ -1804,6 +1904,47 @@
         "created_at": {
           "type": "string",
           "example": "2026-02-10T14:30:00Z"
+        }
+      }
+    },
+    "EtapaUsuarioRequest": {
+      "type": "object",
+      "required": [
+        "id_etapa"
+      ],
+      "properties": {
+        "id_etapa": {
+          "type": "integer",
+          "example": 1
+        }
+      }
+    },
+    "EtapaUsuarioCreateResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "id_etapa_usuario": {
+          "type": "integer",
+          "example": 42
+        }
+      }
+    },
+    "EtapaUsuarioListResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "etapas": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "example": [1, 2, 3]
         }
       }
     },
