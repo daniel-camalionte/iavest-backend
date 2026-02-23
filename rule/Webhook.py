@@ -3,7 +3,6 @@ from model.Pagamento import PagamentoModel
 from model.WebhookMercadopago import WebhookMercadopagoModel
 from library.HttpClient import HttpClient
 import config.env as memory
-import sentry_sdk
 import json
 from datetime import datetime, timedelta
 
@@ -50,21 +49,10 @@ class WebhookRule():
             action = data.get("action", "")
             payment_id = None
 
-            # Log de toda notificacao no Sentry
-            sentry_sdk.add_breadcrumb(
-                category="webhook",
-                message="Notificacao MP recebida",
-                data={"action": action, "payload": data},
-                level="info"
-            )
-
             if data.get("data") and data["data"].get("id"):
                 payment_id = str(data["data"]["id"])
 
             if not payment_id:
-                sentry_sdk.set_context("request", {"payload": data})
-                sentry_sdk.set_context("response", {"body": {"success": True}, "status_code": 200})
-                sentry_sdk.capture_message("Webhook MP: sem payment_id", level="warning")
                 self._finalizar_webhook(id_webhook, "finished")
                 return {"success": True}, 200
 
@@ -72,12 +60,6 @@ class WebhookRule():
             payment = self._buscar_pagamento(payment_id)
 
             if not payment:
-                sentry_sdk.set_context("request", {"payload": data})
-                sentry_sdk.set_context("response", {"body": {"success": True}, "status_code": 200})
-                sentry_sdk.capture_message(
-                    "Webhook MP: pagamento nao encontrado na API",
-                    level="warning"
-                )
                 self._finalizar_webhook(id_webhook, "finished")
                 return {"success": True}, 200
 
@@ -91,12 +73,6 @@ class WebhookRule():
                 preapproval_id = self._buscar_preapproval_por_payment(payment)
 
             if not preapproval_id:
-                sentry_sdk.set_context("request", {"payload": data})
-                sentry_sdk.set_context("response", {"body": {"success": True}, "status_code": 200})
-                sentry_sdk.capture_message(
-                    "Webhook MP: preapproval_id nao encontrado",
-                    level="warning"
-                )
                 return {"success": True}, 200
 
             # Buscar assinatura no banco
@@ -104,12 +80,6 @@ class WebhookRule():
             assinatura = modAssinatura.where(['mercadopago_subscription_id', '=', preapproval_id]).find()
 
             if not assinatura:
-                sentry_sdk.set_context("request", {"payload": data})
-                sentry_sdk.set_context("response", {"body": {"success": True}, "status_code": 200})
-                sentry_sdk.capture_message(
-                    "Webhook MP: assinatura nao encontrada no banco",
-                    level="warning"
-                )
                 return {"success": True}, 200
 
             ass = assinatura[0]
@@ -132,21 +102,6 @@ class WebhookRule():
 
                 modAssinatura = AssinaturaModel()
                 modAssinatura.update(obj, ass["id_assinatura"])
-
-            # Log de sucesso com contexto
-            sentry_sdk.set_context("request", {"payload": data})
-            sentry_sdk.set_context("response", {"body": {"success": True}, "status_code": 200})
-            sentry_sdk.set_context("webhook_result", {
-                "action": action,
-                "payment_id": payment_id,
-                "payment_status": payment_status,
-                "preapproval_id": preapproval_id,
-                "id_assinatura": ass["id_assinatura"]
-            })
-            sentry_sdk.capture_message(
-                "Webhook MP: processado com sucesso",
-                level="info"
-            )
 
             return {"success": True}, 200
 

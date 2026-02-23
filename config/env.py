@@ -68,11 +68,6 @@ crypto = {
     "KEY": os.environ.get("CRYPTO_KEY", "")
 }
 
-# SENTRY
-sentry = {
-    "DSN": os.environ.get("SENTRY_DSN", "")
-}
-
 # FIREBASE
 firebase = {
     "API_KEY": os.environ.get("FIREBASE_API_KEY", "")

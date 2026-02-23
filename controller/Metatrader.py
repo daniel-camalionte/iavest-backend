@@ -10,7 +10,6 @@ from model.ControllerError import ControllerError
 
 import re
 import json
-import sentry_sdk
 
 class MetatraderLoginController(MethodView):
     def post(self):
@@ -47,24 +46,11 @@ class MetatraderLoginController(MethodView):
           ruleMetatraderLogin = MetatraderLoginRule()
           dados_login = ruleMetatraderLogin.login(data, ip)
 
-          # Log Sentry
-          status_code = dados_login[1] if isinstance(dados_login, tuple) else 200
-          resp = dados_login[0] if isinstance(dados_login, tuple) else dados_login
-          level = "info" if status_code == 200 else "warning"
-
-          sentry_sdk.set_context("request", {"payload": data, "ip": ip})
-          sentry_sdk.set_context("response", {"body": resp, "status_code": status_code})
-          sentry_sdk.capture_message("MT Login: " + ("sucesso" if status_code == 200 else "falha"), level=level)
-
           return dados_login
 
         except json.JSONDecodeError as e:
-            sentry_sdk.set_context("request", {"raw": request.data.decode('utf-8') if request.data else None})
-            sentry_sdk.capture_exception(e)
             return {"msg": "JSON inválido: " + str(e)}, 422
         except Exception as e:
-            sentry_sdk.set_context("request", {"payload": data})
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500
 
@@ -97,24 +83,11 @@ class MetatraderTradeStartController(MethodView):
           ruleMetatraderTrade = MetatraderTradeRule()
           result = ruleMetatraderTrade.create(data)
 
-          # Log Sentry
-          status_code = result[1] if isinstance(result, tuple) else 200
-          resp = result[0] if isinstance(result, tuple) else result
-          level = "info" if status_code == 200 else "error"
-
-          sentry_sdk.set_context("request", {"payload": data})
-          sentry_sdk.set_context("response", {"body": resp, "status_code": status_code})
-          sentry_sdk.capture_message("Trade Start: " + ("sucesso" if status_code == 200 else "erro"), level=level)
-
           return result
 
         except json.JSONDecodeError as e:
-            sentry_sdk.set_context("request", {"raw": request.data.decode('utf-8') if request.data else None})
-            sentry_sdk.capture_exception(e)
             return {"msg": "JSON inválido: " + str(e)}, 422
         except Exception as e:
-            sentry_sdk.set_context("request", {"payload": data})
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500
 
@@ -147,23 +120,10 @@ class MetatraderTradeExitController(MethodView):
           ruleMetatraderTrade = MetatraderTradeRule()
           result = ruleMetatraderTrade.close(data)
 
-          # Log Sentry
-          status_code = result[1] if isinstance(result, tuple) else 200
-          resp = result[0] if isinstance(result, tuple) else result
-          level = "info" if status_code == 200 else "error"
-
-          sentry_sdk.set_context("request", {"payload": data})
-          sentry_sdk.set_context("response", {"body": resp, "status_code": status_code})
-          sentry_sdk.capture_message("Trade Exit: " + ("sucesso" if status_code == 200 else "erro"), level=level)
-
           return result
 
         except json.JSONDecodeError as e:
-            sentry_sdk.set_context("request", {"raw": request.data.decode('utf-8') if request.data else None})
-            sentry_sdk.capture_exception(e)
             return {"msg": "JSON inválido: " + str(e)}, 422
         except Exception as e:
-            sentry_sdk.set_context("request", {"payload": data})
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500

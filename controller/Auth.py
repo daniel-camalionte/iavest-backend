@@ -5,8 +5,6 @@ from rule.Auth import AuthRule
 from model.ControllerError import ControllerError
 
 import re
-import sentry_sdk
-
 class SendCodeController(MethodView):
     def post(self):
         try:
@@ -26,7 +24,6 @@ class SendCodeController(MethodView):
             return result, status_code
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500
 
@@ -54,7 +51,6 @@ class VerifyCodeController(MethodView):
             return result, status_code
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500
 
@@ -86,6 +82,5 @@ class CompleteRegistrationController(MethodView):
             return result, status_code
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500

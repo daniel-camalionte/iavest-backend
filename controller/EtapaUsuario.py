@@ -4,8 +4,6 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from rule.EtapaUsuario import EtapaUsuarioRule
 from model.ControllerError import ControllerError
 
-import sentry_sdk
-
 class EtapaUsuarioController(MethodView):
     @jwt_required
     def get(self):
@@ -18,7 +16,6 @@ class EtapaUsuarioController(MethodView):
             return data, status
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500
 
@@ -38,6 +35,5 @@ class EtapaUsuarioController(MethodView):
             return data, status
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500

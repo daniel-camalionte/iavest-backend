@@ -15,15 +15,6 @@ from blacklist import BLACKLIST
 import appController
 import config.env as memory
 
-try:
-    import sentry_sdk
-    sentry_sdk.init(
-        dsn=memory.sentry["DSN"],
-        traces_sample_rate=1.0,
-        send_default_pii=True
-    )
-except Exception:
-    pass
 
 app = Flask(__name__)
 app.config["PROPAGATE_EXCEPTIONS"] = True

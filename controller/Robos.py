@@ -3,8 +3,6 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from rule.Robos import RobosRule
 from model.ControllerError import ControllerError
 
-import sentry_sdk
-
 class RobosListController(MethodView):
     @jwt_required
     def get(self):
@@ -17,6 +15,5 @@ class RobosListController(MethodView):
             return data, status
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500

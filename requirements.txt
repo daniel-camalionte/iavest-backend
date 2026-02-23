@@ -10,7 +10,6 @@ boto3==1.34.0
 pycryptodome==3.19.0
 pyfcm==2.0.3
 mercadopago==2.2.1
-sentry-sdk[flask]==1.39.1
 jsonschema==4.20.0
 simplejson==3.19.2
 yt-dlp==2026.2.4
