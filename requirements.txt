@@ -13,7 +13,7 @@ mercadopago==2.2.1
 sentry-sdk[flask]==1.39.1
 jsonschema==4.20.0
 simplejson==3.19.2
-yt-dlp==2024.1.0
+yt-dlp==2026.2.4
 requests==2.31.0
 gunicorn==21.2.0
 Werkzeug==2.3.7
