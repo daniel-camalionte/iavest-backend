@@ -22,7 +22,7 @@ class Normalize:
         
         return data
     
-    @jwt_required
+    @jwt_required()
     def jwt_identity():
         identity = get_jwt_identity()
         return identity

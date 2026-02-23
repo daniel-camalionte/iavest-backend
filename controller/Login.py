@@ -1,15 +1,15 @@
 from flask.views import MethodView
-from flask_jwt_extended import jwt_required, get_raw_jwt
+from flask_jwt_extended import jwt_required, get_jwt
 from blacklist import BLACKLIST
 from model.ControllerError import ControllerError
 
 import sentry_sdk
 
 class LogoutController(MethodView):
-    @jwt_required
+    @jwt_required()
     def post(self):
         try:
-            jwt_id = get_raw_jwt()["jti"] # JWT Token Ifentifier
+            jwt_id = get_jwt()["jti"] # JWT Token Identifier
             BLACKLIST.add(jwt_id)
             return {"msg": 'Logout realizado com sucesso!'}, 200
 

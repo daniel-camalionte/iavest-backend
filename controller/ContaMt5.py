@@ -7,7 +7,7 @@ from model.ControllerError import ControllerError
 import sentry_sdk
 
 class ContaMt5ListController(MethodView):
-    @jwt_required
+    @jwt_required()
     def get(self):
         try:
             identity = get_jwt_identity()
@@ -28,7 +28,7 @@ class ContaMt5ListController(MethodView):
             msg = ControllerError().default(e)
             return msg, 500
 
-    @jwt_required
+    @jwt_required()
     def post(self):
         try:
             get_json = request.get_json()
@@ -50,7 +50,7 @@ class ContaMt5ListController(MethodView):
 
 
 class ContaMt5DetailController(MethodView):
-    @jwt_required
+    @jwt_required()
     def put(self, id):
         try:
             get_json = request.get_json()
@@ -70,7 +70,7 @@ class ContaMt5DetailController(MethodView):
             msg = ControllerError().default(e)
             return msg, 500
 
-    @jwt_required
+    @jwt_required()
     def delete(self, id):
         try:
             identity = get_jwt_identity()

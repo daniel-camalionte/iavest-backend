@@ -7,7 +7,7 @@ from model.ControllerError import ControllerError
 import sentry_sdk
 
 class EtapaUsuarioController(MethodView):
-    @jwt_required
+    @jwt_required()
     def get(self):
         try:
             identity = get_jwt_identity()
@@ -22,7 +22,7 @@ class EtapaUsuarioController(MethodView):
             msg = ControllerError().default(e)
             return msg, 500
 
-    @jwt_required
+    @jwt_required()
     def post(self):
         try:
             get_json = request.get_json()

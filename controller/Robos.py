@@ -6,7 +6,7 @@ from model.ControllerError import ControllerError
 import sentry_sdk
 
 class RobosListController(MethodView):
-    @jwt_required
+    @jwt_required()
     def get(self):
         try:
             identity = get_jwt_identity()

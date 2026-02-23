@@ -6,7 +6,7 @@ from model.ControllerError import ControllerError
 import sentry_sdk
 
 class EtapaListController(MethodView):
-    @jwt_required
+    @jwt_required()
     def get(self):
         try:
             rule = EtapaRule()

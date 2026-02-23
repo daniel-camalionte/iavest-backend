@@ -7,7 +7,7 @@ from model.ControllerError import ControllerError
 import sentry_sdk
 
 class AssinaturaStatusController(MethodView):
-    @jwt_required
+    @jwt_required()
     def get(self):
         try:
             identity = get_jwt_identity()
@@ -23,7 +23,7 @@ class AssinaturaStatusController(MethodView):
             return msg, 500
 
 class AssinaturaCancelarController(MethodView):
-    @jwt_required
+    @jwt_required()
     def post(self):
         try:
             identity = get_jwt_identity()
@@ -39,7 +39,7 @@ class AssinaturaCancelarController(MethodView):
             return msg, 500
 
 class AssinaturaCriarController(MethodView):
-    @jwt_required
+    @jwt_required()
     def post(self):
         try:
             get_json = request.get_json()

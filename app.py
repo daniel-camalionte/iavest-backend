@@ -29,16 +29,16 @@ app = Flask(__name__)
 app.config["PROPAGATE_EXCEPTIONS"] = True
 app.config["JWT_SECRET_KEY"] = memory.jwt["JWT_SECRET_KEY"]
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = memory.jwt["JWT_ACCESS_TOKEN_EXPIRES"]
-app.config["JWT_BLACKLIST_ENABLED"] = True
+app.config["JWT_BLACKLIST_ENABLED"] = True  # mantido para compatibilidade
 
 jwt = JWTManager(app)  
 
-@jwt.token_in_blacklist_loader
-def verifica_blacklist(token):
-    return token['jti'] in BLACKLIST
+@jwt.token_in_blocklist_loader
+def verifica_blacklist(jwt_header, jwt_data):
+    return jwt_data['jti'] in BLACKLIST
 
 @jwt.revoked_token_loader
-def token_de_acesso_invalidado():
+def token_de_acesso_invalidado(jwt_header, jwt_data):
     return jsonify({"msg": 'Token expirado!'}), 401
 
 @jwt.invalid_token_loader

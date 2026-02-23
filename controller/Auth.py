@@ -60,7 +60,7 @@ class VerifyCodeController(MethodView):
 
 
 class CompleteRegistrationController(MethodView):
-    @jwt_required
+    @jwt_required()
     def post(self):
         try:
             get_json = request.get_json()
