@@ -4,8 +4,6 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from rule.ContaMt5 import ContaMt5Rule
 from model.ControllerError import ControllerError
 
-import sentry_sdk
-
 class ContaMt5ListController(MethodView):
     @jwt_required
     def get(self):
@@ -24,7 +22,6 @@ class ContaMt5ListController(MethodView):
             return data, status
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500
 
@@ -44,7 +41,6 @@ class ContaMt5ListController(MethodView):
             return data, status
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500
 
@@ -66,7 +62,6 @@ class ContaMt5DetailController(MethodView):
             return data, status
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500
 
@@ -81,6 +76,5 @@ class ContaMt5DetailController(MethodView):
             return data, status
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500

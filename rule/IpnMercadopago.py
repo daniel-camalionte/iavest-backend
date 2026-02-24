@@ -3,7 +3,6 @@ from model.Assinatura import AssinaturaModel
 from model.Pagamento import PagamentoModel
 from library.HttpClient import HttpClient
 import config.env as memory
-import sentry_sdk
 import json
 from datetime import datetime, timedelta
 
@@ -21,13 +20,6 @@ class IpnMercadopagoRule():
             "status": "pending"
         })
 
-        sentry_sdk.add_breadcrumb(
-            category="ipn",
-            message="IPN MP recebida",
-            data={"topic": topic, "resource_id": resource_id, "id_ipn": id_ipn},
-            level="info"
-        )
-
         try:
             if topic == "payment":
                 self._processar_payment(id_ipn, resource_id)
@@ -38,7 +30,6 @@ class IpnMercadopagoRule():
 
         except Exception as e:
             self._atualizar_ipn(id_ipn, "error", None, str(e))
-            sentry_sdk.capture_exception(e)
 
         return {"success": True}, 200
 
@@ -68,7 +59,6 @@ class IpnMercadopagoRule():
                     break
 
         if not preapproval_id:
-            sentry_sdk.capture_message("IPN MP: preapproval_id nao encontrado no payment " + str(payment_id), level="warning")
             return
 
         # Buscar assinatura no banco
@@ -76,7 +66,6 @@ class IpnMercadopagoRule():
         assinatura = modAssinatura.where(['mercadopago_subscription_id', '=', preapproval_id]).find()
 
         if not assinatura:
-            sentry_sdk.capture_message("IPN MP: assinatura nao encontrada para preapproval " + str(preapproval_id), level="warning")
             return
 
         ass = assinatura[0]
@@ -96,8 +85,6 @@ class IpnMercadopagoRule():
                 "data_proxima_cobranca": proxima.strftime('%Y-%m-%d %H:%M:%S')
             }, ass["id_assinatura"])
 
-        sentry_sdk.capture_message("IPN MP: payment processado com sucesso", level="info")
-
     def _processar_merchant_order(self, id_ipn, order_id):
         url = "https://api.mercadopago.com/merchant_orders/" + str(order_id)
         headers = {
@@ -113,8 +100,6 @@ class IpnMercadopagoRule():
 
         order = response["data"]
         self._atualizar_ipn(id_ipn, "processed", json.dumps(order, default=str), None)
-
-        sentry_sdk.capture_message("IPN MP: merchant_order processada", level="info")
 
     def _registrar_pagamento(self, id_assinatura, payment):
         modPagamento = PagamentoModel()

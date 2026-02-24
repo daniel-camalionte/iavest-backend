@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/c/WINDOWS/py -c \"\nimport pymysql\n\nconn = pymysql.connect\\(\n    host=''mysql.iavest.com.br'',\n    user=''iavest01'',\n    password=''Dsj2yF7w8uKo'',\n    database=''iavest01'',\n    port=3306\n\\)\n\ncursor = conn.cursor\\(\\)\n\ncursor.execute\\(''SHOW TABLES''\\)\ntables = [t[0] for t in cursor.fetchall\\(\\)]\nprint\\(''=== TABELAS ENCONTRADAS ===''\\)\nfor t in tables:\n    print\\(f''  - {t}''\\)\nprint\\(\\)\n\nprint\\(''=== ESTRUTURA DAS TABELAS ===''\\)\nfor table in tables:\n    print\\(f''\\\\n# {table}''\\)\n    print\\(''-'' * 50\\)\n    cursor.execute\\(f''DESCRIBE {table}''\\)\n    columns = cursor.fetchall\\(\\)\n    for col in columns:\n        field, type_, null, key, default, extra = col\n        key_info = ''''\n        if key == ''PRI'':\n            key_info = '' [PK]''\n        elif key == ''MUL'':\n            key_info = '' [FK/IDX]''\n        elif key == ''UNI'':\n            key_info = '' [UQ]''\n        print\\(f''  {field}: {type_}{key_info}''\\)\n\nprint\\(''\\\\n\\\\n=== RELACIONAMENTOS \\(FOREIGN KEYS\\) ===''\\)\ncursor.execute\\(''''''\n    SELECT \n        TABLE_NAME,\n        COLUMN_NAME,\n        REFERENCED_TABLE_NAME,\n        REFERENCED_COLUMN_NAME\n    FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE\n    WHERE REFERENCED_TABLE_NAME IS NOT NULL\n    AND TABLE_SCHEMA = ''iavest01''\n    ORDER BY TABLE_NAME\n''''''\\)\nfks = cursor.fetchall\\(\\)\nif fks:\n    for fk in fks:\n        print\\(f''  {fk[0]}.{fk[1]} -> {fk[2]}.{fk[3]}''\\)\nelse:\n    print\\(''  Nenhuma FK explicita. Analisando por convencao de nomes...''\\)\n    \nconn.close\\(\\)\n\")",
+      "Bash(/c/WINDOWS/py:*)",
+      "Bash(where:*)",
+      "Bash(python:*)",
+      "Bash(py:*)",
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "Bash(/c/Users/Japinguinha/AppData/Local/Programs/Python/Python38-32/python.exe:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker exec:*)",
+      "Bash(/c/Users/Japinguinha/AppData/Local/Programs/Python/Python*/python.exe)",
+      "Bash(git add:*)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git -C /c/GIT/iavest/iavest-backend log --oneline -3)",
+      "Bash(chmod:*)",
+      "Bash(export MYSQL_DB_HOSTNAME=mysql.iavest.com.br MYSQL_DB_USER=iavest01 MYSQL_DB_PASSWORD=Dsj2yF7w8uKo MYSQL_DB_NAME=iavest01 MYSQL_DB_PORT=3306)",
+      "Bash(cd:*)",
+      "Bash(winget install:*)",
+      "Bash(winget:*)",
+      "Bash(curl:*)",
+      "Bash(unzip:*)",
+      "Bash(echo:*)",
+      "Bash(which git:*)",
+      "Bash(export:*)",
+      "Bash(true:*)",
+      "Bash(git:*)"
+    ]
+  }
+}

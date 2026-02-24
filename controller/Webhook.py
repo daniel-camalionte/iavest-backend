@@ -4,7 +4,6 @@ from rule.Webhook import WebhookRule
 from model.ControllerError import ControllerError
 import config.env as memory
 
-import sentry_sdk
 import hmac
 import hashlib
 
@@ -27,8 +26,6 @@ class WebhookMercadoPagoController(MethodView):
             return data, status
 
         except Exception as e:
-            sentry_sdk.set_context("request", {"payload": get_json})
-            sentry_sdk.capture_exception(e)
             return {"success": True}, 200
 
     def _validar_assinatura(self, secret):
@@ -83,5 +80,4 @@ class WebhookMercadoPagoReprocessController(MethodView):
             return data, status
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             return {"success": False, "message": str(e)}, 500

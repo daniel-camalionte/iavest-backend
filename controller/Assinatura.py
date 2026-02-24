@@ -4,8 +4,6 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from rule.Assinatura import AssinaturaRule
 from model.ControllerError import ControllerError
 
-import sentry_sdk
-
 class AssinaturaStatusController(MethodView):
     @jwt_required
     def get(self):
@@ -18,7 +16,6 @@ class AssinaturaStatusController(MethodView):
             return data, status
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500
 
@@ -34,7 +31,6 @@ class AssinaturaCancelarController(MethodView):
             return data, status
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500
 
@@ -55,6 +51,5 @@ class AssinaturaCriarController(MethodView):
             return data, status
 
         except Exception as e:
-            sentry_sdk.capture_exception(e)
             msg = ControllerError().default(e)
             return msg, 500
