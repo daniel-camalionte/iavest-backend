@@ -100,6 +100,7 @@ erDiagram
         longtext recursos
         tinyint destaque
         int contrato
+        int esgotado
         int ativo
         timestamp created_at
         timestamp updated_at
@@ -190,6 +191,28 @@ erDiagram
         timestamp created_at
     }
 
+    ticket_type {
+        int id_ticket_type PK
+        varchar identificador
+        varchar label
+        varchar descricao
+        int ativo
+        int ordem
+        timestamp created_at
+    }
+
+    ticket {
+        int id_ticket PK
+        int id_usuario FK
+        int id_ticket_type FK
+        enum status
+        varchar mensagem
+        text payload
+        timestamp resolved_at
+        timestamp created_at
+        timestamp updated_at
+    }
+
     usuario ||--o{ assinatura : "assina"
     plano ||--o{ assinatura : "possui"
     assinatura ||--o{ pagamento : "gera"
@@ -203,6 +226,8 @@ erDiagram
     estrategia ||--o{ trade : "gera"
     etapa ||--o{ etapa_usuario : "concluida por"
     usuario ||--o{ etapa_usuario : "conclui"
+    ticket_type ||--o{ ticket : "categoriza"
+    usuario ||--o{ ticket : "abre"
 ```
 
 ## Relacionamentos (Foreign Keys)
@@ -222,6 +247,8 @@ erDiagram
 | robos | id_plano | plano | id_plano | N:1 |
 | etapa_usuario | id_etapa | etapa | id_etapa | N:1 |
 | etapa_usuario | id_usuario | usuario | id_usuario | N:1 |
+| ticket | id_usuario | usuario | id_usuario | N:1 |
+| ticket | id_ticket_type | ticket_type | id_ticket_type | N:1 |
 
 ## Indices e Constraints
 
@@ -239,6 +266,8 @@ erDiagram
 | pagamento | INDEX | idx_assinatura | id_assinatura |
 | pagamento | INDEX | idx_mp_payment | mercadopago_payment_id |
 | pagamento | INDEX | idx_status | status |
+| ticket | INDEX | idx_ticket_usuario | id_usuario |
+| ticket | INDEX | idx_ticket_type | id_ticket_type |
 
 ## Resumo das Tabelas
 
@@ -288,6 +317,7 @@ erDiagram
 - Planos de assinatura disponiveis
 - Valores: original e com desconto
 - Integracao com Mercado Pago via `mercadopago_plan_id`
+- Flag `esgotado`: indica que o plano nao aceita novas assinaturas
 
 ### assinatura
 - Assinaturas dos usuarios aos planos
@@ -322,6 +352,17 @@ erDiagram
 ### etapa_usuario
 - Tabela associativa que registra quais etapas cada usuario concluiu
 
+### ticket_type
+- Categorias de tickets de suporte
+- Campos: `identificador` (slug), `label` (rotulo), `descricao`, `ativo`, `ordem` (sequencia de exibicao)
+
+### ticket
+- Tickets de suporte abertos pelos usuarios
+- Vinculado a usuario e ticket_type
+- Status: `aberto`, `em_analise`, `aguardando_usuario`, `resolvido`, `fechado`
+- Campo `mensagem` com texto padrao informando que interacao ocorre por email
+- `payload` para dados adicionais, `resolved_at` para data de resolucao
+
 ## Fluxo de Dados
 
 ```
@@ -339,6 +380,8 @@ usuario
    +---> plano_usuario ---> plano
    |
    +---> etapa_usuario ---> etapa
+   |
+   +---> ticket ---> ticket_type
 
 estrategia ---> trade
 ```

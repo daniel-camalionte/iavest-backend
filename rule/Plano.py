@@ -28,7 +28,8 @@ class PlanoRule():
                 "descricao": plano["descricao"],
                 "preco_mensal": float(plano["valor_original"]),
                 "recursos": recursos,
-                "destaque": bool(plano["destaque"])
+                "destaque": bool(plano["destaque"]),
+                "esgotado": bool(plano["esgotado"])
             })
 
         return {"success": True, "planos": lista}, 200

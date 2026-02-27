@@ -72,3 +72,8 @@ crypto = {
 firebase = {
     "API_KEY": os.environ.get("FIREBASE_API_KEY", "")
 }
+
+# TICKET / SUPORTE
+ticket = {
+    "SUPPORT_EMAILS": os.environ.get("TICKET_SUPPORT_EMAILS", "dcamalionte@gmail.com")
+}

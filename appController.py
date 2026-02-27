@@ -12,4 +12,6 @@ from controller.ContaMt5 import ContaMt5ListController, ContaMt5DetailController
 from controller.Robos import RobosListController
 from controller.Etapa import EtapaListController
 from controller.EtapaUsuario import EtapaUsuarioController
+from controller.TicketType import TicketTypeListController
+from controller.Ticket import TicketListController, TicketCreateController
 
