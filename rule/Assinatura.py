@@ -152,7 +152,7 @@ class AssinaturaRule():
         }
 
         payload = {
-            "reason": plano["nome"] + " - IAVest",
+            "reason": plano["nome"] + " - IAvest",
             "auto_recurring": {
                 "frequency": 1,
                 "frequency_type": "months",

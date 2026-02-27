@@ -97,6 +97,11 @@ api.add_resource(appController.RobosListController, '/robos')
 api.add_resource(appController.EtapaListController, '/etapa')
 api.add_resource(appController.EtapaUsuarioController, '/etapa/usuario')
 
+#Ticket
+api.add_resource(appController.TicketTypeListController, '/ticket/types')
+api.add_resource(appController.TicketListController, '/tickets')
+api.add_resource(appController.TicketCreateController, '/ticket')
+
 #Webhook
 api.add_resource(appController.WebhookMercadoPagoController, '/webhook/mercadopago')
 api.add_resource(appController.WebhookMercadoPagoReprocessController, '/webhook/mercadopago/reprocess')

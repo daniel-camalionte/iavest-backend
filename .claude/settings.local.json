@@ -28,7 +28,9 @@
       "Bash(which git:*)",
       "Bash(export:*)",
       "Bash(true:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(mysql:*)",
+      "Bash(node:*)"
     ]
   }
 }

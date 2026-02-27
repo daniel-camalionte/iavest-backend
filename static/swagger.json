@@ -62,6 +62,10 @@
     {
       "name": "Etapas",
       "description": "Etapas de onboarding do usuario"
+    },
+    {
+      "name": "Ticket",
+      "description": "Sistema de suporte via tickets"
     }
   ],
   "schemes": [
@@ -1061,6 +1065,131 @@
         }
       }
     },
+    "/ticket/types": {
+      "get": {
+        "tags": [
+          "Ticket"
+        ],
+        "summary": "Lista os tipos de ticket disponíveis",
+        "description": "Retorna todos os tipos de ticket disponíveis para abertura de suporte.",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de tipos de ticket retornada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/TicketTypesListResponse"
+            }
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/ticket": {
+      "post": {
+        "tags": [
+          "Ticket"
+        ],
+        "summary": "Abre um novo ticket de suporte",
+        "description": "Registra um novo ticket de suporte para o usuario autenticado.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/TicketCreateRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Ticket registrado com sucesso",
+            "schema": {
+              "$ref": "#/definitions/TicketCreateResponse"
+            }
+          },
+          "400": {
+            "description": "Dados inválidos ou ausentes",
+            "schema": {
+              "$ref": "#/definitions/TicketErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/tickets": {
+      "get": {
+        "tags": [
+          "Ticket"
+        ],
+        "summary": "Lista todos os tickets",
+        "description": "Retorna todos os tickets de suporte do usuario autenticado.",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "description": "Token JWT (Bearer token)",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de tickets retornada com sucesso",
+            "schema": {
+              "$ref": "#/definitions/TicketsListResponse"
+            }
+          },
+          "401": {
+            "description": "Token invalido ou expirado"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
     "/corretoras": {
       "get": {
         "tags": [
@@ -2034,6 +2163,146 @@
         "lengthSeconds": {
           "type": "integer",
           "example": 600
+        }
+      }
+    },
+    "TicketTypeItem": {
+      "type": "object",
+      "properties": {
+        "id_ticket_type": {
+          "type": "integer",
+          "example": 1
+        },
+        "label": {
+          "type": "string",
+          "example": "Suporte Técnico"
+        },
+        "descricao": {
+          "type": "string",
+          "example": "Problemas técnicos com a plataforma"
+        },
+        "ordem": {
+          "type": "integer",
+          "example": 1
+        }
+      }
+    },
+    "TicketTypesListResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TicketTypeItem"
+          }
+        }
+      }
+    },
+    "TicketCreateRequest": {
+      "type": "object",
+      "required": [
+        "id_ticket_type",
+        "titulo",
+        "descricao"
+      ],
+      "properties": {
+        "id_ticket_type": {
+          "type": "integer",
+          "example": 1
+        },
+        "titulo": {
+          "type": "string",
+          "example": "Problema ao conectar conta MT5"
+        },
+        "descricao": {
+          "type": "string",
+          "example": "Não consigo conectar minha conta MT5 após a última atualização."
+        }
+      }
+    },
+    "TicketCreateResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "Ticket registrado com sucesso"
+        }
+      }
+    },
+    "TicketErrorResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": false
+        },
+        "message": {
+          "type": "string",
+          "example": "Campo obrigatório ausente"
+        }
+      }
+    },
+    "TicketItem": {
+      "type": "object",
+      "properties": {
+        "id_ticket": {
+          "type": "integer",
+          "example": 1
+        },
+        "id_usuario": {
+          "type": "integer",
+          "example": 1
+        },
+        "id_ticket_type": {
+          "type": "integer",
+          "example": 1
+        },
+        "status": {
+          "type": "string",
+          "example": "open"
+        },
+        "mensagem": {
+          "type": "string",
+          "example": "Problema ao conectar conta MT5"
+        },
+        "payload": {
+          "type": "string",
+          "example": "{}"
+        },
+        "resolved_at": {
+          "type": "string",
+          "example": "2026-02-25T14:30:00Z"
+        },
+        "created_at": {
+          "type": "string",
+          "example": "2026-02-25T10:00:00Z"
+        },
+        "updated_at": {
+          "type": "string",
+          "example": "2026-02-25T10:05:00Z"
+        }
+      }
+    },
+    "TicketsListResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "tickets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TicketItem"
+          }
         }
       }
     }
