@@ -1,7 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /api/
-Disallow: /painel/
-Disallow: /login
-
-Sitemap: https://www.iavest.com.br/sitemap.xml
