@@ -124,34 +124,48 @@ class WebhookRule():
             self._finalizar_webhook(id_webhook, "finished")
             return {"success": True}, 200
 
-        # Buscar preapproval na API do ML (endpoint correto para assinaturas)
+        # Buscar preapproval na API do ML
         preapproval = self._buscar_preapproval(preapproval_id)
         self._finalizar_webhook(id_webhook, "finished", preapproval)
 
         if not preapproval:
             return {"success": True}, 200
 
-        # Buscar assinatura no banco
+        mp_status = preapproval.get("status", "")
+        external_reference = preapproval.get("external_reference", "")
+
+        if not external_reference:
+            return {"success": True}, 200
+
         modAssinatura = AssinaturaModel()
+
+        # Buscar assinatura pelo subscription_id (evento duplicado)
         assinatura = modAssinatura.where(['mercadopago_subscription_id', '=', preapproval_id]).find()
+
+        # Buscar pelo id_usuario (external_reference) + pending — registro criado no /criar
+        if not assinatura:
+            assinatura = modAssinatura.where(['id_usuario', '=', external_reference]).where(['status', '=', 'pending']).order('created_at', 'DESC').find()
 
         if not assinatura:
             return {"success": True}, 200
 
         ass = assinatura[0]
-        mp_status = preapproval.get("status", "")
 
         if mp_status == "authorized":
             now = datetime.now()
             proxima = now + timedelta(days=30)
             modAssinatura.update({
+                "mercadopago_subscription_id": preapproval_id,
                 "status": "active",
                 "data_inicio": now.strftime('%Y-%m-%d %H:%M:%S'),
                 "data_proxima_cobranca": proxima.strftime('%Y-%m-%d %H:%M:%S')
             }, ass["id_assinatura"])
 
         elif mp_status in ["cancelled", "paused"]:
-            modAssinatura.update({"status": mp_status}, ass["id_assinatura"])
+            modAssinatura.update({
+                "mercadopago_subscription_id": preapproval_id,
+                "status": mp_status
+            }, ass["id_assinatura"])
 
         return {"success": True}, 200
 

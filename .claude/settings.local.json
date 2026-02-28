@@ -30,7 +30,8 @@
       "Bash(true:*)",
       "Bash(git:*)",
       "Bash(mysql:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(python.exe:*)"
     ]
   }
 }

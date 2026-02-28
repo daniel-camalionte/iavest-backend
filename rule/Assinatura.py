@@ -25,6 +25,9 @@ class AssinaturaRule():
         if not plano.get("ativo"):
             return {"success": False, "message": "Plano inválido"}, 400
 
+        if not plano.get("preapproval_plan_id"):
+            return {"success": False, "message": "Plano sem configuração no Mercado Pago"}, 400
+
         # Verificar assinatura ativa
         modAssinatura = AssinaturaModel()
         assinatura_ativa = modAssinatura.where(['id_usuario', '=', id_usuario]).where(['status', '=', 'active']).find()
@@ -32,30 +35,42 @@ class AssinaturaRule():
         if assinatura_ativa:
             return {"success": False, "message": "Usuário já possui assinatura ativa"}, 409
 
-        # Criar assinatura no Mercado Pago
-        mp_response, mp_error = self._criar_preapproval(plano)
+        # Obter URL do plano: usa a salva no banco ou busca na API do ML
+        plan_url = plano.get("mercadopago_plan_url") or self._buscar_url_plano(plano["preapproval_plan_id"])
 
-        if not mp_response:
-            return {"success": False, "message": "Erro ao criar assinatura no Mercado Pago", "detail": mp_error}, 500
+        if not plan_url:
+            return {"success": False, "message": "Não foi possível obter URL de checkout do plano"}, 500
 
-        # Salvar no banco
+        # Adiciona external_reference para identificar o usuário no webhook
+        separator = "&" if "?" in plan_url else "?"
+        checkout_url = "{}{}external_reference={}".format(plan_url, separator, id_usuario)
+
+        # Reutilizar checkout pendente se o usuário ainda não concluiu
+        assinatura_pendente = modAssinatura.where(['id_usuario', '=', id_usuario]).where(['id_plano', '=', plano_id]).where(['status', '=', 'pending']).find()
+
+        if assinatura_pendente:
+            return {
+                "success": True,
+                "checkout_url": checkout_url,
+                "assinatura_id": assinatura_pendente[0]["id_assinatura"]
+            }, 200
+
+        # Salvar registro pendente — webhook ativará ao receber confirmação do ML
         obj = {
             "id_usuario": id_usuario,
             "id_plano": plano_id,
-            "mercadopago_subscription_id": mp_response.get("id", ""),
-            "checkout_url": mp_response.get("init_point", ""),
+            "checkout_url": checkout_url,
             "status": "pending"
         }
 
-        modAssinatura = AssinaturaModel()
         id_assinatura = modAssinatura.save(obj)
 
         if not id_assinatura:
-            return {"success": False, "message": "Erro ao salvar assinatura"}, 500
+            return {"success": False, "message": "Erro ao registrar assinatura"}, 500
 
         return {
             "success": True,
-            "checkout_url": mp_response.get("init_point", ""),
+            "checkout_url": checkout_url,
             "assinatura_id": id_assinatura
         }, 200
 
@@ -68,7 +83,6 @@ class AssinaturaRule():
 
         ass = assinatura[0]
 
-        # Buscar plano
         modPlano = PlanoModel()
         plano_data = modPlano.find_one(ass["id_plano"])
         plano = plano_data[0] if plano_data else {}
@@ -94,7 +108,6 @@ class AssinaturaRule():
         }, 200
 
     def cancelar(self, id_usuario):
-        # Buscar assinatura ativa
         modAssinatura = AssinaturaModel()
         assinatura = modAssinatura.where(['id_usuario', '=', id_usuario]).where(['status', '=', 'active']).find()
 
@@ -103,21 +116,31 @@ class AssinaturaRule():
 
         ass = assinatura[0]
 
-        # Cancelar no Mercado Pago
         mp_id = ass.get("mercadopago_subscription_id")
         if mp_id:
             self._cancelar_preapproval(mp_id)
 
-        # Atualizar no banco
-        obj = {
+        modAssinatura.update({
             "status": "cancelled",
             "data_fim": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-
-        modAssinatura = AssinaturaModel()
-        modAssinatura.update(obj, ass["id_assinatura"])
+        }, ass["id_assinatura"])
 
         return {"success": True, "message": "Assinatura cancelada com sucesso"}, 200
+
+    def _buscar_url_plano(self, preapproval_plan_id):
+        url = "https://api.mercadopago.com/preapproval_plan/" + preapproval_plan_id
+
+        headers = {
+            "Authorization": "Bearer " + memory.mercadopago["ACCESS_TOKEN"]
+        }
+
+        try:
+            response = HttpClient.get(url, headers=headers)
+            if response and response["status_code"] == 200:
+                return response["data"].get("init_point", "")
+            return None
+        except Exception:
+            return None
 
     def _cancelar_preapproval(self, preapproval_id):
         url = "https://api.mercadopago.com/preapproval/" + str(preapproval_id)
@@ -132,43 +155,3 @@ class AssinaturaRule():
             return response and response["status_code"] == 200
         except Exception:
             return False
-
-    def _criar_preapproval(self, plano):
-        url = "https://api.mercadopago.com/preapproval"
-
-        headers = {
-            "Authorization": "Bearer " + memory.mercadopago["ACCESS_TOKEN"],
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "reason": plano["nome"] + " - IAvest",
-            "back_url": memory.mercadopago["BACK_URL"],
-            "status": "pending"
-        }
-
-        if memory.mercadopago.get("NOTIFICATION_URL"):
-            payload["notification_url"] = memory.mercadopago["NOTIFICATION_URL"]
-
-        # Plano com ID do ML: configurações recorrentes já estão no plano
-        if plano.get("mercadopago_plan_id"):
-            payload["preapproval_plan_id"] = plano["mercadopago_plan_id"]
-        else:
-            payload["auto_recurring"] = {
-                "frequency": 1,
-                "frequency_type": "months",
-                "transaction_amount": float(plano["valor_original"]),
-                "currency_id": "BRL"
-            }
-
-        try:
-            response = HttpClient.post(url, headers=headers, payload=payload)
-
-            if response and response["status_code"] in [200, 201]:
-                return response["data"], None
-            else:
-                error = response["data"] if response else "Sem resposta"
-                return None, str(error)
-
-        except Exception as e:
-            return None, str(e)
