@@ -1,6 +1,5 @@
 from model.Assinatura import AssinaturaModel
 from model.Plano import PlanoModel
-from model.Usuario import UsuarioModel
 from library.HttpClient import HttpClient
 import config.env as memory
 import json
@@ -33,17 +32,8 @@ class AssinaturaRule():
         if assinatura_ativa:
             return {"success": False, "message": "Usuário já possui assinatura ativa"}, 409
 
-        # Buscar email do usuario (ou usar email do request para testes)
-        payer_email = data.get("email")
-        if not payer_email:
-            modUsuario = UsuarioModel()
-            usuario_data = modUsuario.find_one(id_usuario)
-            if not usuario_data:
-                return {"success": False, "message": "Usuário não encontrado"}, 400
-            payer_email = usuario_data[0]["email"]
-
         # Criar assinatura no Mercado Pago
-        mp_response, mp_error = self._criar_preapproval(plano, payer_email)
+        mp_response, mp_error = self._criar_preapproval(plano)
 
         if not mp_response:
             return {"success": False, "message": "Erro ao criar assinatura no Mercado Pago", "detail": mp_error}, 500
@@ -143,7 +133,7 @@ class AssinaturaRule():
         except Exception:
             return False
 
-    def _criar_preapproval(self, plano, payer_email):
+    def _criar_preapproval(self, plano):
         url = "https://api.mercadopago.com/preapproval"
 
         headers = {
@@ -153,20 +143,23 @@ class AssinaturaRule():
 
         payload = {
             "reason": plano["nome"] + " - IAvest",
-            "auto_recurring": {
+            "back_url": memory.mercadopago["BACK_URL"],
+            "status": "pending"
+        }
+
+        if memory.mercadopago.get("NOTIFICATION_URL"):
+            payload["notification_url"] = memory.mercadopago["NOTIFICATION_URL"]
+
+        # Plano com ID do ML: configurações recorrentes já estão no plano
+        if plano.get("mercadopago_plan_id"):
+            payload["preapproval_plan_id"] = plano["mercadopago_plan_id"]
+        else:
+            payload["auto_recurring"] = {
                 "frequency": 1,
                 "frequency_type": "months",
                 "transaction_amount": float(plano["valor_original"]),
                 "currency_id": "BRL"
-            },
-            "back_url": memory.mercadopago["BACK_URL"],
-            "payer_email": payer_email,
-            "status": "pending"
-        }
-
-        # Se o plano tem ID do Mercado Pago, usar
-        if plano.get("mercadopago_plan_id"):
-            payload["preapproval_plan_id"] = plano["mercadopago_plan_id"]
+            }
 
         try:
             response = HttpClient.post(url, headers=headers, payload=payload)

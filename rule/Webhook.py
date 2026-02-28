@@ -47,6 +47,11 @@ class WebhookRule():
     def _processar(self, data, id_webhook):
         try:
             action = data.get("action", "")
+
+            # Evento de mudança de status da assinatura
+            if action == "subscription.preapproval":
+                return self._processar_subscription(data, id_webhook)
+
             payment_id = None
 
             if data.get("data") and data["data"].get("id"):
@@ -109,6 +114,47 @@ class WebhookRule():
             self._finalizar_webhook(id_webhook, "error", erro=str(e))
             raise
 
+    def _processar_subscription(self, data, id_webhook):
+        preapproval_id = None
+
+        if data.get("data") and data["data"].get("id"):
+            preapproval_id = str(data["data"]["id"])
+
+        if not preapproval_id:
+            self._finalizar_webhook(id_webhook, "finished")
+            return {"success": True}, 200
+
+        # Buscar preapproval na API do ML (endpoint correto para assinaturas)
+        preapproval = self._buscar_preapproval(preapproval_id)
+        self._finalizar_webhook(id_webhook, "finished", preapproval)
+
+        if not preapproval:
+            return {"success": True}, 200
+
+        # Buscar assinatura no banco
+        modAssinatura = AssinaturaModel()
+        assinatura = modAssinatura.where(['mercadopago_subscription_id', '=', preapproval_id]).find()
+
+        if not assinatura:
+            return {"success": True}, 200
+
+        ass = assinatura[0]
+        mp_status = preapproval.get("status", "")
+
+        if mp_status == "authorized":
+            now = datetime.now()
+            proxima = now + timedelta(days=30)
+            modAssinatura.update({
+                "status": "active",
+                "data_inicio": now.strftime('%Y-%m-%d %H:%M:%S'),
+                "data_proxima_cobranca": proxima.strftime('%Y-%m-%d %H:%M:%S')
+            }, ass["id_assinatura"])
+
+        elif mp_status in ["cancelled", "paused"]:
+            modAssinatura.update({"status": mp_status}, ass["id_assinatura"])
+
+        return {"success": True}, 200
+
     def _finalizar_webhook(self, id_webhook, status, response=None, erro=None):
         try:
             modWebhook = WebhookMercadopagoModel()
@@ -120,6 +166,21 @@ class WebhookRule():
             modWebhook.update(obj, id_webhook)
         except Exception:
             pass
+
+    def _buscar_preapproval(self, preapproval_id):
+        url = "https://api.mercadopago.com/preapproval/" + preapproval_id
+
+        headers = {
+            "Authorization": "Bearer " + memory.mercadopago["ACCESS_TOKEN"]
+        }
+
+        try:
+            response = HttpClient.get(url, headers=headers)
+            if response and response["status_code"] == 200:
+                return response["data"]
+            return None
+        except Exception:
+            return None
 
     def _buscar_pagamento(self, payment_id):
         url = "https://api.mercadopago.com/v1/payments/" + payment_id

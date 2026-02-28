@@ -8,8 +8,11 @@ class TicketListController(MethodView):
     @jwt_required
     def get(self):
         try:
+            identity = get_jwt_identity()
+            id_usuario = identity.get("id_usuario")
+
             rule = TicketRule()
-            data, status = rule.listar()
+            data, status = rule.listar(id_usuario)
             return data, status
 
         except Exception as e:

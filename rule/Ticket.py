@@ -10,9 +10,9 @@ from datetime import datetime
 
 class TicketRule():
 
-    def listar(self):
+    def listar(self, id_usuario):
         modTicket = TicketModel()
-        tickets = modTicket.order('created_at', 'DESC').find()
+        tickets = modTicket.where(['id_usuario', '=', id_usuario]).order('created_at', 'DESC').find()
 
         if not tickets:
             return {"success": True, "tickets": []}, 200

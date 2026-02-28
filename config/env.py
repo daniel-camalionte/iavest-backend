@@ -50,6 +50,7 @@ mercadopago = {
     "PUBLIC_KEY": os.environ.get("MERCADOPAGO_PUBLIC_KEY", ""),
     "ACCESS_TOKEN": os.environ.get("MERCADOPAGO_ACCESS_TOKEN", ""),
     "BACK_URL": os.environ.get("MERCADOPAGO_BACK_URL", ""),
+    "NOTIFICATION_URL": os.environ.get("MERCADOPAGO_NOTIFICATION_URL", ""),
     "WEBHOOK_SECRET": os.environ.get("MERCADOPAGO_WEBHOOK_SECRET", "")
 }
 
