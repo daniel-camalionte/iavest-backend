@@ -5,6 +5,17 @@ from rule.Auth import AuthRule
 from model.ControllerError import ControllerError
 
 import re
+
+def _validar_cpf(cpf):
+    if len(cpf) != 11 or len(set(cpf)) == 1:
+        return False
+    for i, r in enumerate([10, 11]):
+        total = sum(int(cpf[j]) * (r - j) for j in range(i + 9))
+        digito = (total * 10 % 11) % 10
+        if digito != int(cpf[9 + i]):
+            return False
+    return True
+
 class SendCodeController(MethodView):
     def post(self):
         try:
@@ -74,6 +85,10 @@ class CompleteRegistrationController(MethodView):
             email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
             if not re.match(email_regex, email):
                 return {"success": False, "message": "Email inválido"}, 400
+
+            cpf = re.sub(r'\D', '', get_json.get("cpf_cnpj", ""))
+            if not _validar_cpf(cpf):
+                return {"success": False, "message": "CPF inválido"}, 400
 
             identity = get_jwt_identity()
             ruleAuth = AuthRule()

@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-env = os.environ.get("FLASK_ENV", "stg")
+env = os.environ.get("FLASK_ENV", "prd")
 env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), f".env.{env}")
 load_dotenv(env_file)
 
@@ -102,9 +102,18 @@ api.add_resource(appController.TicketTypeListController, '/ticket/types')
 api.add_resource(appController.TicketListController, '/tickets')
 api.add_resource(appController.TicketCreateController, '/ticket')
 
+#Usuario
+api.add_resource(appController.UsuarioController, '/usuario')
+
+#Assinatura Asaas
+api.add_resource(appController.AssinaturaAsaasCriarController, '/assinatura/asaas/criar')
+api.add_resource(appController.AssinaturaAsaasCancelarController, '/assinatura/asaas/cancelar')
+api.add_resource(appController.AssinaturaAsaasInvoiceController, '/assinatura/asaas/invoice')
+
 #Webhook
 api.add_resource(appController.WebhookMercadoPagoController, '/webhook/mercadopago')
 api.add_resource(appController.WebhookMercadoPagoReprocessController, '/webhook/mercadopago/reprocess')
+api.add_resource(appController.WebhookAsaasController, '/webhook/asaas')
 
 #IPN
 api.add_resource(appController.IpnMercadoPagoController, '/ipn/mercadopago')

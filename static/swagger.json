@@ -66,6 +66,14 @@
     {
       "name": "Ticket",
       "description": "Sistema de suporte via tickets"
+    },
+    {
+      "name": "Asaas",
+      "description": "Assinaturas via Asaas (checkout transparente)"
+    },
+    {
+      "name": "Usuario",
+      "description": "Dados cadastrais do usuário logado"
     }
   ],
   "schemes": [
@@ -73,6 +81,95 @@
     "http"
   ],
   "paths": {
+    "/usuario": {
+      "get": {
+        "tags": ["Usuario"],
+        "summary": "Dados do usuário logado",
+        "description": "Retorna os dados cadastrais do usuário autenticado.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dados retornados com sucesso",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": true },
+                "usuario": {
+                  "type": "object",
+                  "properties": {
+                    "id_usuario": { "type": "integer", "example": 1 },
+                    "email": { "type": "string", "example": "usuario@email.com" },
+                    "nome": { "type": "string", "example": "João Silva" },
+                    "ddd": { "type": "string", "example": "11" },
+                    "telefone": { "type": "string", "example": "999999999" },
+                    "cpf_cnpj": { "type": "string", "example": "12345678909" },
+                    "ultimo_login": { "type": "string", "example": "2026-03-01 10:00:00" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token inválido ou expirado" },
+          "404": { "description": "Usuário não encontrado" },
+          "500": { "description": "Internal Server Error" }
+        }
+      },
+      "put": {
+        "tags": ["Usuario"],
+        "summary": "Atualizar dados cadastrais",
+        "description": "Atualiza nome, ddd, telefone e/ou cpf_cnpj do usuário logado. Todos os campos são opcionais, mas ao menos um deve ser enviado. CPF é validado e salvo sem máscara.",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["cpf_cnpj"],
+              "properties": {
+                "nome": { "type": "string", "example": "João Silva" },
+                "ddd": { "type": "string", "example": "11" },
+                "telefone": { "type": "string", "example": "999999999" },
+                "cpf_cnpj": { "type": "string", "example": "123.456.789-09", "description": "Obrigatório. Aceita com ou sem máscara." }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dados atualizados com sucesso",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": true },
+                "message": { "type": "string", "example": "Dados atualizados com sucesso" }
+              }
+            }
+          },
+          "400": { "description": "CPF inválido ou nenhum campo enviado" },
+          "401": { "description": "Token inválido ou expirado" },
+          "500": { "description": "Internal Server Error" }
+        }
+      }
+    },
     "/version": {
       "get": {
         "tags": [
@@ -439,7 +536,7 @@
           "Assinatura"
         ],
         "summary": "Status da assinatura",
-        "description": "Retorna o status da assinatura ativa do usuario logado.",
+        "description": "Retorna o status da assinatura do usuário logado. Três cenários possíveis: (1) sem assinatura → tem_assinatura: false; (2) assinatura Asaas pendente de primeiro pagamento → tem_assinatura: false + pendente.invoice_url; (3) assinatura ativa → tem_assinatura: true + assinatura{}. Quando overdue, usar GET /assinatura/asaas/invoice para obter a invoice_url da renovação.",
         "produces": [
           "application/json"
         ],
@@ -1249,6 +1346,129 @@
           }
         }
       }
+    },
+    "/assinatura/asaas/criar": {
+      "post": {
+        "tags": ["Asaas"],
+        "summary": "Criar assinatura via Asaas",
+        "description": "Cria cliente e assinatura recorrente no Asaas. Retorna invoice_url para redirecionar o usuário ao checkout hospedado do Asaas, onde ele escolhe PIX, Boleto ou Cartão.",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["plano_id"],
+              "properties": {
+                "plano_id": { "type": "integer", "example": 1 }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Assinatura criada. Redirecionar o usuário para invoice_url.",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": true },
+                "invoice_url": { "type": "string", "example": "https://sandbox.asaas.com/i/abc123" }
+              }
+            }
+          },
+          "400": { "description": "Dados inválidos ou plano não encontrado" },
+          "409": { "description": "Usuário já possui assinatura ativa" },
+          "500": { "description": "Erro ao processar no Asaas" }
+        }
+      }
+    },
+    "/assinatura/asaas/cancelar": {
+      "post": {
+        "tags": ["Asaas"],
+        "summary": "Cancelar assinatura Asaas",
+        "description": "Cancela a assinatura ativa do usuário no Asaas",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          }
+        ],
+        "responses": {
+          "200": { "description": "Assinatura cancelada com sucesso" },
+          "404": { "description": "Nenhuma assinatura ativa encontrada" },
+          "500": { "description": "Internal Server Error" }
+        }
+      }
+    },
+    "/assinatura/asaas/invoice": {
+      "get": {
+        "tags": ["Asaas"],
+        "summary": "Invoice da cobrança pendente",
+        "description": "Retorna a invoice_url da cobrança mais recente com status PENDING ou OVERDUE. Usar quando o usuário precisa pagar a renovação mensal.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "URL de pagamento encontrada",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": true },
+                "invoice_url": { "type": "string", "example": "https://sandbox.asaas.com/i/abc123" },
+                "vencimento": { "type": "string", "example": "2026-04-01" },
+                "valor": { "type": "number", "example": 97.00 },
+                "status": { "type": "string", "example": "OVERDUE" }
+              }
+            }
+          },
+          "404": { "description": "Nenhuma assinatura ou cobrança pendente encontrada" },
+          "409": { "description": "Assinatura já está ativa" },
+          "500": { "description": "Erro ao consultar Asaas" }
+        }
+      }
+    },
+    "/webhook/asaas": {
+      "post": {
+        "tags": ["Asaas"],
+        "summary": "Webhook Asaas",
+        "description": "Recebe notificações de eventos do Asaas. Eventos tratados: PAYMENT_CONFIRMED, PAYMENT_RECEIVED (ativa assinatura), PAYMENT_OVERDUE (marca overdue), PAYMENT_RESTORED (reverte para pending), PAYMENT_DELETED, SUBSCRIPTION_DELETED, SUBSCRIPTION_INACTIVATED, PAYMENT_REFUNDED (cancela assinatura).",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "asaas-access-token",
+            "in": "header",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": { "description": "Evento processado" },
+          "403": { "description": "Token inválido" }
+        }
+      }
     }
   },
   "definitions": {
@@ -1649,6 +1869,14 @@
           "type": "boolean",
           "example": true
         },
+        "pendente": {
+          "type": "object",
+          "description": "Presente quando tem_assinatura = false e há assinatura Asaas aguardando o primeiro pagamento. Para renovações (overdue), usar GET /assinatura/asaas/invoice.",
+          "properties": {
+            "gateway": { "type": "string", "example": "asaas" },
+            "invoice_url": { "type": "string", "example": "https://sandbox.asaas.com/i/abc123", "description": "URL do checkout para o primeiro pagamento" }
+          }
+        },
         "assinatura": {
           "type": "object",
           "description": "Presente apenas quando tem_assinatura = true",
@@ -1663,7 +1891,7 @@
             },
             "status": {
               "type": "string",
-              "enum": ["pending", "active", "paused", "cancelled"],
+              "enum": ["pending", "active", "overdue", "cancelled"],
               "example": "active"
             },
             "data_inicio": {

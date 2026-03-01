@@ -79,6 +79,16 @@ class AssinaturaRule():
         assinatura = modAssinatura.where(['id_usuario', '=', id_usuario]).where(['status', '=', 'active']).find()
 
         if not assinatura:
+            pendente = modAssinatura.where(['id_usuario', '=', id_usuario]).where(['status', '=', 'pending']).where(['gateway', '=', 'asaas']).find()
+            if pendente:
+                return {
+                    "success": True,
+                    "tem_assinatura": False,
+                    "pendente": {
+                        "gateway": "asaas",
+                        "invoice_url": pendente[0].get("checkout_url", "")
+                    }
+                }, 200
             return {"success": True, "tem_assinatura": False}, 200
 
         ass = assinatura[0]

@@ -17,6 +17,8 @@ class PagamentoModel(BaseModel):
                     "id_pagamento": 'id_pagamento',
                     "id_assinatura": 'id_assinatura',
                     "mercadopago_payment_id": 'mercadopago_payment_id',
+                    "gateway_payment_id": 'gateway_payment_id',
+                    "gateway": 'gateway',
                     "valor": 'valor',
                     "status": 'status',
                     "status_detail": 'status_detail',

@@ -14,4 +14,7 @@ from controller.Etapa import EtapaListController
 from controller.EtapaUsuario import EtapaUsuarioController
 from controller.TicketType import TicketTypeListController
 from controller.Ticket import TicketListController, TicketCreateController
+from controller.AssinaturaAsaas import AssinaturaAsaasCriarController, AssinaturaAsaasCancelarController, AssinaturaAsaasInvoiceController
+from controller.WebhookAsaas import WebhookAsaasController
+from controller.Usuario import UsuarioController
 

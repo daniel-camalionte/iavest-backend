@@ -74,6 +74,13 @@ firebase = {
     "API_KEY": os.environ.get("FIREBASE_API_KEY", "")
 }
 
+# ASAAS
+asaas = {
+    "API_KEY": os.environ.get("ASAAS_API_KEY", ""),
+    "WEBHOOK_TOKEN": os.environ.get("ASAAS_WEBHOOK_TOKEN", ""),
+    "API_URL": os.environ.get("ASAAS_API_URL", "https://sandbox.asaas.com/api/v3")
+}
+
 # TICKET / SUPORTE
 ticket = {
     "SUPPORT_EMAILS": os.environ.get("TICKET_SUPPORT_EMAILS", "dcamalionte@gmail.com")

@@ -1,3 +1,4 @@
+import re
 from model.Usuario import UsuarioModel
 from library.SMTP import SMTP
 from library.Funcao import Funcao
@@ -145,7 +146,7 @@ class AuthRule():
             return {"success": False, "message": "Email não corresponde ao token"}, 400
 
         nome = data.get("nome")
-        cpf_cnpj = data.get("cpf_cnpj")
+        cpf_cnpj = re.sub(r'\D', '', data.get("cpf_cnpj", ""))
         ddd = data.get("ddd")
         telefone = data.get("telefone")
 
