@@ -166,14 +166,6 @@ erDiagram
         timestamp created_at
     }
 
-    plano_usuario {
-        int id_plano_usario PK
-        int id_plano FK
-        int id_usuario FK
-        timestamp created_at
-        timestamp updated_at
-    }
-
     etapa {
         int id_etapa PK
         int ordem
@@ -216,8 +208,6 @@ erDiagram
     usuario ||--o{ assinatura : "assina"
     plano ||--o{ assinatura : "possui"
     assinatura ||--o{ pagamento : "gera"
-    usuario ||--o{ plano_usuario : "assina"
-    plano ||--o{ plano_usuario : "possui"
     usuario ||--o{ metatrader_configs : "configura"
     corretora ||--o{ metatrader_configs : "associada"
     symbols ||--o{ metatrader_configs : "define ativo"
@@ -242,8 +232,6 @@ erDiagram
 | assinatura | id_usuario | usuario | id_usuario | N:1 |
 | assinatura | id_plano | plano | id_plano | N:1 |
 | pagamento | id_assinatura | assinatura | id_assinatura | N:1 |
-| plano_usuario | id_plano | plano | id_plano | N:1 |
-| plano_usuario | id_usuario | usuario | id_usuario | N:1 |
 | robos | id_plano | plano | id_plano | N:1 |
 | etapa_usuario | id_etapa | etapa | id_etapa | N:1 |
 | etapa_usuario | id_usuario | usuario | id_usuario | N:1 |
@@ -342,9 +330,6 @@ erDiagram
 - Robos de trading vinculados a planos
 - Dados: nome, descricao, versao, arquivo_url
 
-### plano_usuario
-- Tabela associativa entre plano e usuario
-
 ### etapa
 - Etapas de onboarding/tutorial para os usuarios
 - Campos: `ordem` (sequencia), `titulo`, `descricao`, `url` (link), `video`
@@ -376,8 +361,6 @@ usuario
    +---> assinatura ---> pagamento
    |         |
    |         +---> plano ---> robos
-   |
-   +---> plano_usuario ---> plano
    |
    +---> etapa_usuario ---> etapa
    |

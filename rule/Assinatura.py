@@ -109,6 +109,7 @@ class AssinaturaRule():
             "tem_assinatura": True,
             "assinatura": {
                 "id": ass["id_assinatura"],
+                "id_plano": ass["id_plano"],
                 "plano_nome": plano.get("nome", ""),
                 "status": ass["status"],
                 "data_inicio": str(ass["data_inicio"]) if ass.get("data_inicio") else None,

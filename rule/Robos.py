@@ -1,4 +1,5 @@
 from model.Robos import RobosModel
+from model.Assinatura import AssinaturaModel
 
 class RobosRule():
 
@@ -6,19 +7,24 @@ class RobosRule():
         pass
 
     def listar(self, id_usuario):
+        modAssinatura = AssinaturaModel()
+        assinatura = modAssinatura.where(['id_usuario', '=', id_usuario]).where(['status', '=', 'active']).find()
+
+        if not assinatura:
+            return {"success": False, "message": "Nenhum robô disponível. Verifique sua assinatura."}, 404
+
+        id_plano = assinatura[0]["id_plano"]
+
         modRobos = RobosModel()
 
         sql = """
             SELECT r.id_robos, r.nome, r.descricao, r.versao, r.arquivo_url, r.created_at
             FROM robos r
-            INNER JOIN plano_usuario pu ON pu.id_plano = r.id_plano
-            INNER JOIN assinatura a ON a.id_usuario = pu.id_usuario AND a.id_plano = pu.id_plano
-            WHERE pu.id_usuario = %s
-            AND a.status = 'active'
+            WHERE r.id_plano = %s
             ORDER BY r.nome ASC
         """
 
-        robos = modRobos.execute(sql, [id_usuario])
+        robos = modRobos.execute(sql, [id_plano])
 
         if not robos:
             return {"success": False, "message": "Nenhum robô disponível. Verifique sua assinatura."}, 404
