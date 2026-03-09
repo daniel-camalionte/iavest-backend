@@ -2346,6 +2346,42 @@
         "video": {
           "type": "string",
           "example": "https://www.youtube.com/watch?v=abc123"
+        },
+        "sub_etapas": {
+          "type": "array",
+          "description": "Sub-etapas da etapa. Presente apenas quando existem sub-etapas cadastradas.",
+          "items": {
+            "$ref": "#/definitions/EtapaSubItem"
+          }
+        }
+      }
+    },
+    "EtapaSubItem": {
+      "type": "object",
+      "properties": {
+        "id_etapa_sub": {
+          "type": "integer",
+          "example": 1
+        },
+        "ordem": {
+          "type": "integer",
+          "example": 1
+        },
+        "titulo": {
+          "type": "string",
+          "example": "Baixar o MetaTrader 5"
+        },
+        "descricao": {
+          "type": "string",
+          "example": "Acesse o site oficial e instale o MT5"
+        },
+        "url": {
+          "type": "string",
+          "example": "https://www.metatrader5.com/download"
+        },
+        "video": {
+          "type": "string",
+          "example": "https://www.youtube.com/watch?v=abc123"
         }
       }
     },

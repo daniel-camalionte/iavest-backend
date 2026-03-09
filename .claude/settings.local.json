@@ -31,7 +31,20 @@
       "Bash(git:*)",
       "Bash(mysql:*)",
       "Bash(node:*)",
-      "Bash(python.exe:*)"
+      "Bash(python.exe:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.asaas.com)",
+      "Bash(ls:*)",
+      "Bash(printenv:*)",
+      "Bash(cmd:*)",
+      "Read(//c/Users/Japinguinha/AppData/Local/Programs/Python//**)",
+      "Bash(ls /c/Python*)",
+      "Read(//c/Users/Japinguinha/**)",
+      "Bash(\"$PYTHON\":*)",
+      "Bash(for f in /c/GIT/iavest/iavest-backend/model/*.py)",
+      "Bash(do echo \"=== $f ===\")",
+      "Read(//c/GIT/iavest/iavest-backend/**)",
+      "Bash(done)"
     ]
   }
 }

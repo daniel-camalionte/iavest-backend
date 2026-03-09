@@ -1,4 +1,4 @@
-from model.Robos import RobosModel
+from model.Estrategia import EstrategiaModel
 from model.Assinatura import AssinaturaModel
 
 class RobosRule():
@@ -15,16 +15,23 @@ class RobosRule():
 
         id_plano = assinatura[0]["id_plano"]
 
-        modRobos = RobosModel()
-
         sql = """
-            SELECT r.id_robos, r.nome, r.descricao, r.versao, r.arquivo_url, r.created_at
-            FROM robos r
-            WHERE r.id_plano = %s
-            ORDER BY r.nome ASC
+            SELECT
+                e.id_estrategia AS id_robos,
+                e.robo_nome     AS nome,
+                e.robo_descricao AS descricao,
+                e.robo_versao   AS versao,
+                e.robo_url      AS arquivo_url,
+                e.created_at
+            FROM estrategia e
+            INNER JOIN plano_estrategia pe ON pe.id_estrategia = e.id_estrategia
+            WHERE pe.id_plano = %s
+              AND e.robo_url IS NOT NULL
+              AND e.status = 'active'
+            ORDER BY e.robo_nome ASC
         """
 
-        robos = modRobos.execute(sql, [id_plano])
+        robos = EstrategiaModel().execute(sql, [id_plano])
 
         if not robos:
             return {"success": False, "message": "Nenhum robô disponível. Verifique sua assinatura."}, 404

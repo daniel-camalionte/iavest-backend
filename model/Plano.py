@@ -19,6 +19,7 @@ class PlanoModel(BaseModel):
                     "descricao": 'descricao',
                     "valor_original": 'valor_original',
                     "valor_desconto": 'valor_desconto',
+                    "mercadopago_plan_id": 'mercadopago_plan_id',
                     "mercadopago_plan_url": 'mercadopago_plan_url',
                     "preapproval_plan_id": 'preapproval_plan_id',
                     "recursos": 'recursos',

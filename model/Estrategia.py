@@ -21,6 +21,10 @@ class EstrategiaModel(BaseModel):
                     "risco": 'risco',
                     "status": 'status',
                     "parametros": 'parametros',
+                    "robo_nome": 'robo_nome',
+                    "robo_descricao": 'robo_descricao',
+                    "robo_versao": 'robo_versao',
+                    "robo_url": 'robo_url',
                     "created_at": 'created_at',
                     "updated_at": 'updated_at'
                 }

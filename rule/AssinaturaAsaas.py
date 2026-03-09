@@ -204,7 +204,10 @@ class AssinaturaAsaasRule():
             "value": float(plano["valor_original"]),
             "cycle": "MONTHLY",
             "description": plano["nome"] + " - IAvest",
-            "externalReference": str(id_usuario)
+            "externalReference": str(id_usuario),
+            "checkoutConfig": {
+                "paymentTypes": ["CREDIT_CARD", "DEBIT_CARD", "PIX"]
+            }
         }
 
         resp = HttpClient.post(memory.asaas["API_URL"] + "/subscriptions", headers=headers, payload=payload)

@@ -46,6 +46,10 @@ erDiagram
         enum risco
         enum status
         longtext parametros
+        varchar robo_nome
+        varchar robo_descricao
+        varchar robo_versao
+        varchar robo_url
         timestamp created_at
         timestamp updated_at
     }
@@ -97,6 +101,8 @@ erDiagram
         decimal valor_original
         decimal valor_desconto
         varchar mercadopago_plan_id
+        varchar mercadopago_plan_url
+        varchar preapproval_plan_id
         longtext recursos
         tinyint destaque
         int contrato
@@ -106,12 +112,22 @@ erDiagram
         timestamp updated_at
     }
 
+    plano_estrategia {
+        int id_plano_estrategia PK
+        int id_plano FK
+        int id_estrategia FK
+    }
+
     assinatura {
         int id_assinatura PK
         int id_usuario FK
         int id_plano FK
         varchar mercadopago_subscription_id
+        varchar asaas_customer_id
+        varchar asaas_subscription_id
+        enum gateway
         text checkout_url
+        varchar remote_ip
         enum status
         timestamp data_inicio
         timestamp data_fim
@@ -124,6 +140,8 @@ erDiagram
         int id_pagamento PK
         int id_assinatura FK
         varchar mercadopago_payment_id
+        varchar gateway_payment_id
+        enum gateway
         decimal valor
         varchar status
         varchar status_detail
@@ -156,18 +174,30 @@ erDiagram
         timestamp updated_at
     }
 
-    robos {
-        int id_robos PK
-        int id_plano FK
-        varchar nome
-        varchar descricao
-        varchar versao
-        varchar arquivo_url
+    webhook_asaas {
+        int id_webhook PK
+        varchar event
+        longtext payload
+        longtext response
+        varchar status
+        text erro
         timestamp created_at
+        timestamp updated_at
     }
 
     etapa {
         int id_etapa PK
+        int ordem
+        varchar titulo
+        varchar descricao
+        varchar url
+        varchar video
+        timestamp created_at
+    }
+
+    etapa_sub {
+        int id_etapa_sub PK
+        int id_etapa FK
         int ordem
         varchar titulo
         varchar descricao
@@ -212,8 +242,10 @@ erDiagram
     corretora ||--o{ metatrader_configs : "associada"
     symbols ||--o{ metatrader_configs : "define ativo"
     metatrader_configs ||--o{ metatrader_configs_log : "registra"
-    plano ||--o{ robos : "disponibiliza"
+    plano ||--o{ plano_estrategia : "vincula"
+    estrategia ||--o{ plano_estrategia : "vinculada"
     estrategia ||--o{ trade : "gera"
+    etapa ||--o{ etapa_sub : "subdivide"
     etapa ||--o{ etapa_usuario : "concluida por"
     usuario ||--o{ etapa_usuario : "conclui"
     ticket_type ||--o{ ticket : "categoriza"
@@ -232,7 +264,9 @@ erDiagram
 | assinatura | id_usuario | usuario | id_usuario | N:1 |
 | assinatura | id_plano | plano | id_plano | N:1 |
 | pagamento | id_assinatura | assinatura | id_assinatura | N:1 |
-| robos | id_plano | plano | id_plano | N:1 |
+| plano_estrategia | id_plano | plano | id_plano | N:1 |
+| plano_estrategia | id_estrategia | estrategia | id_estrategia | N:1 |
+| etapa_sub | id_etapa | etapa | id_etapa | N:1 |
 | etapa_usuario | id_etapa | etapa | id_etapa | N:1 |
 | etapa_usuario | id_usuario | usuario | id_usuario | N:1 |
 | ticket | id_usuario | usuario | id_usuario | N:1 |
@@ -254,6 +288,8 @@ erDiagram
 | pagamento | INDEX | idx_assinatura | id_assinatura |
 | pagamento | INDEX | idx_mp_payment | mercadopago_payment_id |
 | pagamento | INDEX | idx_status | status |
+| plano_estrategia | INDEX | idx_id_plano | id_plano |
+| plano_estrategia | INDEX | idx_id_estrategia | id_estrategia |
 | ticket | INDEX | idx_ticket_usuario | id_usuario |
 | ticket | INDEX | idx_ticket_type | id_ticket_type |
 
@@ -280,11 +316,12 @@ erDiagram
 - Tipos: `scalping`, `day_trading`, `swing_trading`, `position_trading`, `algorithmic`
 - Niveis de risco: `low`, `medium`, `high`
 - Status: `active`, `inactive`, `testing`
+- Dados do robo associado: `robo_nome`, `robo_descricao`, `robo_versao`, `robo_url`
 
 ### metatrader_configs
 - Configuracoes de conexao com MetaTrader 4/5
 - Vinculada a usuario, corretora e symbols
-- Tipo de conta: `TEST`, `REAL`
+- Tipo de conta: `DEMO`, `REAL`
 - Platform: `MT4`, `MT5`
 - Status: `active`, `inactive`, `error`
 - UNIQUE: combinacao de `id_usuario` + `account_number`
@@ -304,17 +341,23 @@ erDiagram
 ### plano
 - Planos de assinatura disponiveis
 - Valores: original e com desconto
-- Integracao com Mercado Pago via `mercadopago_plan_id`
+- Integracao com Mercado Pago via `mercadopago_plan_id` e `preapproval_plan_id`
 - Flag `esgotado`: indica que o plano nao aceita novas assinaturas
+
+### plano_estrategia
+- Tabela associativa entre planos e estrategias
+- Define quais estrategias estao disponiveis em cada plano
 
 ### assinatura
 - Assinaturas dos usuarios aos planos
 - Status: `pending`, `active`, `paused`, `cancelled`
-- Integracao com Mercado Pago
+- Integracao com Mercado Pago e Asaas via campos especificos de cada gateway
+- Campo `gateway`: `mercadopago` ou `asaas`
 
 ### pagamento
 - Pagamentos vinculados a assinaturas
-- Integracao com Mercado Pago via `mercadopago_payment_id`
+- Suporte a multiplos gateways: `mercadopago` e `asaas`
+- `gateway_payment_id`: ID do pagamento no gateway correspondente
 
 ### ipn_mercadopago
 - Armazena notificacoes IPN recebidas do Mercado Pago
@@ -326,13 +369,17 @@ erDiagram
 - Status: `processing`, `finished`, `error`
 - Controle de tentativas via `attempts`
 
-### robos
-- Robos de trading vinculados a planos
-- Dados: nome, descricao, versao, arquivo_url
+### webhook_asaas
+- Armazena webhooks recebidos do Asaas
+- Status: `processing`, `finished`, `error`
 
 ### etapa
 - Etapas de onboarding/tutorial para os usuarios
 - Campos: `ordem` (sequencia), `titulo`, `descricao`, `url` (link), `video`
+
+### etapa_sub
+- Sub-etapas vinculadas a uma etapa principal
+- Mesma estrutura da etapa: `ordem`, `titulo`, `descricao`, `url`, `video`
 
 ### etapa_usuario
 - Tabela associativa que registra quais etapas cada usuario concluiu
@@ -360,15 +407,14 @@ usuario
    |
    +---> assinatura ---> pagamento
    |         |
-   |         +---> plano ---> robos
+   |         +---> plano ---> plano_estrategia ---> estrategia ---> trade
    |
-   +---> etapa_usuario ---> etapa
+   +---> etapa_usuario ---> etapa ---> etapa_sub
    |
    +---> ticket ---> ticket_type
-
-estrategia ---> trade
 ```
 
 1. Usuario configura conexao MetaTrader vinculada a uma corretora e um ativo (symbol)
 2. Estrategias geram trades identificados por account_number
-3. Usuario assina planos e gera pagamentos via Mercado Pago
+3. Usuario assina planos que dao acesso a estrategias via plano_estrategia
+4. Assinaturas geram pagamentos via Mercado Pago ou Asaas
