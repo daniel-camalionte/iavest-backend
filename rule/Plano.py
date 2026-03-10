@@ -8,7 +8,7 @@ class PlanoRule():
 
     def listar(self):
         modPlano = PlanoModel()
-        planos = modPlano.where(['ativo', '=', 1]).order('id_plano', 'ASC').find()
+        planos = modPlano.where(['ativo', '=', 1]).order('ordem', 'ASC').find()
 
         if not planos:
             return {"success": True, "planos": []}, 200

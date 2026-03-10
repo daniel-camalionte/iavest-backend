@@ -26,6 +26,7 @@ class PlanoModel(BaseModel):
                     "destaque": 'destaque',
                     "contrato": 'contrato',
                     "esgotado": 'esgotado',
+                    "ordem": 'ordem',
                     "ativo": 'ativo',
                     "created_at": 'created_at',
                     "updated_at": 'updated_at'
