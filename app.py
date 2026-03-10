@@ -74,6 +74,7 @@ api.add_resource(appController.MetatraderTradeExitController, '/metatrader/trade
 
 #YouTube
 api.add_resource(appController.VideosListController, '/trpc/videos.list')
+api.add_resource(appController.VideosCacheClearController, '/trpc/videos.cache/clear')
 
 #Planos
 api.add_resource(appController.PlanoListController, '/planos')

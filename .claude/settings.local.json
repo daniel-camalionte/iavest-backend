@@ -44,7 +44,9 @@
       "Bash(for f in /c/GIT/iavest/iavest-backend/model/*.py)",
       "Bash(do echo \"=== $f ===\")",
       "Read(//c/GIT/iavest/iavest-backend/**)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(xargs grep -l \"videos.list\\\\|videos_list\\\\|youtube\")",
+      "Bash(xargs grep:*)"
     ]
   }
 }

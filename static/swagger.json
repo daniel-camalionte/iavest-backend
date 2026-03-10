@@ -1347,6 +1347,33 @@
         }
       }
     },
+    "/trpc/videos.cache/clear": {
+      "post": {
+        "tags": [
+          "YouTube"
+        ],
+        "summary": "Limpar cache de videos",
+        "description": "Limpa o cache em memoria dos videos do canal. A proxima requisicao ao /trpc/videos.list buscara os dados diretamente do YouTube.",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Cache limpo com sucesso",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": true },
+                "message": { "type": "string", "example": "Cache limpo com sucesso" }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
     "/assinatura/asaas/criar": {
       "post": {
         "tags": ["Asaas"],

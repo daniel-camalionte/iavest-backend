@@ -1,4 +1,8 @@
 import yt_dlp
+import time
+
+_cache = {"data": None, "at": 0}
+_TTL = 24 * 3600  # 24 horas
 
 class YoutubeRule():
 
@@ -8,6 +12,9 @@ class YoutubeRule():
         pass
 
     def list_videos(self):
+        if _cache["data"] and (time.time() - _cache["at"]) < _TTL:
+            return _cache["data"], 200
+
         ydl_opts = {
             'extract_flat': True,
             'quiet': True,
@@ -29,5 +36,8 @@ class YoutubeRule():
                 "publishedTimeText": entry.get('description', ''),
                 "lengthSeconds": entry.get('duration', 0),
             })
+
+        _cache["data"] = videos
+        _cache["at"] = time.time()
 
         return videos, 200

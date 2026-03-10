@@ -2,7 +2,7 @@ from controller.Version import VersionController
 from controller.Login import LogoutController
 from controller.Metatrader import MetatraderLoginController, MetatraderTradeStartController, MetatraderTradeExitController
 from controller.Auth import SendCodeController, VerifyCodeController, CompleteRegistrationController
-from controller.Youtube import VideosListController
+from controller.Youtube import VideosListController, VideosCacheClearController
 from controller.Plano import PlanoListController
 from controller.Assinatura import AssinaturaCriarController, AssinaturaStatusController, AssinaturaCancelarController
 from controller.Webhook import WebhookMercadoPagoController, WebhookMercadoPagoReprocessController
