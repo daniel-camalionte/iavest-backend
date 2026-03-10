@@ -22,6 +22,7 @@ class RobosRule():
                 e.robo_descricao AS descricao,
                 e.robo_versao   AS versao,
                 e.robo_url      AS arquivo_url,
+                e.robo_operacao AS operacao,
                 e.created_at
             FROM estrategia e
             INNER JOIN plano_estrategia pe ON pe.id_estrategia = e.id_estrategia
@@ -44,6 +45,7 @@ class RobosRule():
                 "descricao": robo["descricao"],
                 "versao": robo["versao"],
                 "arquivo_url": robo["arquivo_url"],
+                "operacao": robo["operacao"],
                 "created_at": str(robo["created_at"]) if robo["created_at"] else None
             })
 

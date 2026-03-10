@@ -2077,6 +2077,10 @@
           "type": "string",
           "example": "https://iavest.com.br/robos/scalper-v1.ex5"
         },
+        "operacao": {
+          "type": "string",
+          "example": "buy"
+        },
         "created_at": {
           "type": "string",
           "example": "2026-02-10 14:30:00"

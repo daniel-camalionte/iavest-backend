@@ -25,6 +25,7 @@ class EstrategiaModel(BaseModel):
                     "robo_descricao": 'robo_descricao',
                     "robo_versao": 'robo_versao',
                     "robo_url": 'robo_url',
+                    "robo_operacao": 'operacao',
                     "created_at": 'created_at',
                     "updated_at": 'updated_at'
                 }
