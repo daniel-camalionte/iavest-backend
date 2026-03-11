@@ -17,4 +17,5 @@ from controller.Ticket import TicketListController, TicketCreateController
 from controller.AssinaturaAsaas import AssinaturaAsaasCriarController, AssinaturaAsaasCancelarController, AssinaturaAsaasInvoiceController
 from controller.WebhookAsaas import WebhookAsaasController
 from controller.Usuario import UsuarioController
+from controller.Chat import ChatController
 

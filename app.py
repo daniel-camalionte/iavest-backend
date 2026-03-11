@@ -51,6 +51,12 @@ app.register_blueprint(SWAGGERUI_BLUEPRINT, url_prefix=SWAGGER_URL)
 
 api = Api(app)
 
+CORS(app, resources={
+    r"/chat": {
+        "origins": ["https://www.iavest.com.br", "https://iavest.com.br"]
+    }
+})
+
 #Version
 api.add_resource(appController.VersionController, '/version')
 #Login
@@ -118,6 +124,9 @@ api.add_resource(appController.WebhookAsaasController, '/webhook/asaas')
 
 #IPN
 api.add_resource(appController.IpnMercadoPagoController, '/ipn/mercadopago')
+
+#Chat IA
+api.add_resource(appController.ChatController, '/chat')
 
 #touch ~/apps_wsgi/stg.wsgi
 

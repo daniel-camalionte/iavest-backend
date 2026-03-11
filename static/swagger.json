@@ -81,6 +81,55 @@
     "http"
   ],
   "paths": {
+    "/chat": {
+      "post": {
+        "tags": ["Chat IA"],
+        "summary": "Conversar com a IAVest IA",
+        "description": "Envia um histórico de mensagens para a IAVest IA (GPT-4o-mini) e recebe a resposta. Aceita requisições de https://iavest.com.br e https://www.iavest.com.br.",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["messages"],
+              "properties": {
+                "messages": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "role": { "type": "string", "enum": ["user", "assistant"], "example": "user" },
+                      "content": { "type": "string", "example": "O que é a IAvest?" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resposta gerada com sucesso",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "reply": { "type": "string", "example": "A IAvest é uma plataforma de robôs de trading com IA..." }
+              }
+            }
+          },
+          "400": {
+            "description": "Campo messages ausente ou inválido"
+          },
+          "500": {
+            "description": "Erro ao chamar a API da OpenAI"
+          }
+        }
+      }
+    },
     "/usuario": {
       "get": {
         "tags": ["Usuario"],

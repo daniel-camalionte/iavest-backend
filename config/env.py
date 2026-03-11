@@ -81,6 +81,11 @@ asaas = {
     "API_URL": os.environ.get("ASAAS_API_URL", "https://sandbox.asaas.com/api/v3")
 }
 
+# OPENAI
+openai = {
+    "API_KEY": os.environ.get("OPENAI_API_KEY", "")
+}
+
 # TICKET / SUPORTE
 ticket = {
     "SUPPORT_EMAILS": os.environ.get("TICKET_SUPPORT_EMAILS", "dcamalionte@gmail.com")
