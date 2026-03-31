@@ -74,6 +74,10 @@
     {
       "name": "Usuario",
       "description": "Dados cadastrais do usuário logado"
+    },
+    {
+      "name": "Market Analysis",
+      "description": "Análise de mercado do Mini Índice Bovespa com IA (Claude Opus 4)"
     }
   ],
   "schemes": [
@@ -81,6 +85,150 @@
     "http"
   ],
   "paths": {
+    "/market/ping": {
+      "get": {
+        "tags": ["Market Analysis"],
+        "summary": "Testar conexão com a API do Claude",
+        "description": "Verifica se a chave da API Anthropic está configurada e funcionando.",
+        "produces": ["application/json"],
+        "responses": {
+          "200": {
+            "description": "Conexão com Claude API funcionando",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status":   { "type": "string", "example": "success" },
+                "msg":      { "type": "string", "example": "Conexão com Claude API funcionando" },
+                "model":    { "type": "string", "example": "claude-opus-4-5" },
+                "response": { "type": "string", "example": "OK" }
+              }
+            }
+          },
+          "500": { "description": "Erro na conexão ou chave não configurada" }
+        }
+      }
+    },
+    "/market/analyze": {
+      "get": {
+        "tags": ["Market Analysis"],
+        "summary": "Análise de mercado do Mini Índice",
+        "description": "Coleta dados macroeconômicos (SPY, QQQ, DIA, USO, VXX, USD/BRL) e indicadores técnicos do Mini Índice Bovespa via Twelve Data, envia para o Claude Opus 4 e retorna recomendação de operação (COMPRA, VENDA ou INDEFINIÇÃO) com quantidade de contratos ajustada ao score e ao nível do VIX. Resultado é cacheado por TTL configurável (padrão 1h).",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "contracts",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 1,
+            "description": "Quantidade máxima de contratos disponível. O sistema retorna a quantidade real com base no score e no VIX.",
+            "example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Análise gerada ou recuperada do cache",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "date":            { "type": "string",  "example": "2026-03-24" },
+                "generated_at":    { "type": "string",  "example": "08:21" },
+                "recommendation":  { "type": "string",  "enum": ["COMPRA", "VENDA", "INDEFINIÇÃO"] },
+                "contracts":       { "type": "integer", "example": 6 },
+                "confidence":      { "type": "string",  "enum": ["ALTA", "MEDIA", "BAIXA"] },
+                "score": {
+                  "type": "object",
+                  "properties": {
+                    "total":     { "type": "integer", "example": 64 },
+                    "technical": { "type": "integer", "example": 78 },
+                    "macro":     { "type": "integer", "example": 32 }
+                  }
+                },
+                "ia": {
+                  "type": "object",
+                  "properties": {
+                    "buy":  { "type": "boolean", "example": true },
+                    "sell": { "type": "boolean", "example": false }
+                  }
+                },
+                "technical_signals": {
+                  "type": "object",
+                  "properties": {
+                    "sma9":      { "type": "string", "example": "COMPRA" },
+                    "sma21":     { "type": "string", "example": "COMPRA" },
+                    "sma50":     { "type": "string", "example": "COMPRA" },
+                    "ema_cross": { "type": "string", "example": "GOLDEN_CROSS" },
+                    "rsi":       { "type": "string", "example": "NEUTRO" },
+                    "macd":      { "type": "string", "example": "VENDA" },
+                    "bbands":    { "type": "string", "example": "COMPRA" }
+                  }
+                },
+                "macro_signals": {
+                  "type": "object",
+                  "properties": {
+                    "spy":    { "type": "string", "example": "POSITIVO" },
+                    "qqq":    { "type": "string", "example": "NEUTRO" },
+                    "dia":    { "type": "string", "example": "NEUTRO" },
+                    "uso":    { "type": "string", "example": "NEGATIVO" },
+                    "vxx":    { "type": "string", "example": "ALTO" },
+                    "usdbrl": { "type": "string", "example": "NEUTRO" }
+                  }
+                },
+                "narrative":         { "type": "string", "example": "O S&P 500 avançou 1,05%..." },
+                "cached":            { "type": "boolean", "example": false },
+                "cache_ttl_minutes": { "type": "integer", "example": 60 },
+                "cache_expires_at":  { "type": "string",  "example": "2026-03-24T09:21:00" }
+              }
+            }
+          },
+          "400": { "description": "Parâmetro 'contracts' inválido" },
+          "500": { "description": "Erro ao coletar dados ou processar análise com Claude" }
+        }
+      }
+    },
+    "/market/debug": {
+      "get": {
+        "tags": ["Market Analysis"],
+        "summary": "Debug — respostas brutas do Twelve Data",
+        "description": "Retorna as respostas brutas da API Twelve Data para diagnóstico: batch macro, SPY individual, USD/BRL e dados técnicos do Mini Índice (WIN). Usar apenas para desenvolvimento.",
+        "produces": ["application/json"],
+        "responses": {
+          "200": {
+            "description": "Respostas brutas da API",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "macro_batch":   { "type": "object", "description": "Resposta do batch de todos os ativos macro" },
+                "spy_single":    { "type": "object", "description": "Cotação individual do SPY" },
+                "usdbrl_single": { "type": "object", "description": "Cotação individual do USD/BRL" },
+                "win_price":     { "type": "object", "description": "Preço atual do Mini Índice (WIN)" },
+                "win_sma9":      { "type": "object", "description": "SMA9 do Mini Índice (WIN)" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/market/cache": {
+      "delete": {
+        "tags": ["Market Analysis"],
+        "summary": "Limpar cache da análise",
+        "description": "Remove o cache da última análise, forçando uma nova coleta de dados e chamada ao Claude na próxima requisição de /market/analyze.",
+        "produces": ["application/json"],
+        "responses": {
+          "200": {
+            "description": "Cache limpo com sucesso",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "cleared": { "type": "boolean", "example": true },
+                "message": { "type": "string",  "example": "Cache limpo com sucesso" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/chat": {
       "post": {
         "tags": ["Chat IA"],

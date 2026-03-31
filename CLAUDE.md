@@ -57,8 +57,17 @@ class ExampleModel(BaseModel):
 
 ### Configuration
 
-- **kernel/dump.py** - Contains all configuration (JWT settings, MySQL credentials, utilities). Imported as `memory`
+- **config/env.py** - Contains all configuration (JWT settings, MySQL credentials, API keys). Imported as `memory`
 - **schema/** - JSON Schema files for request validation, used via `Funcao.schema('path/to/schema.json')`
+
+### External AI APIs
+
+This application uses two AI providers:
+
+- **OpenAI** (`memory.openai["API_KEY"]`) — used by Chat (`/chat` route via `rule/Chat.py`)
+- **Anthropic / Claude Opus 4** (`memory.anthropic["API_KEY"]`) — used by Market Analysis (`/market/*` routes)
+
+Do not migrate the Chat feature to Anthropic — keep OpenAI there. New AI features related to market analysis use Claude Opus 4.
 
 ### Utilities
 

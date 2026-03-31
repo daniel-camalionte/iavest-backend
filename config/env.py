@@ -86,6 +86,21 @@ openai = {
     "API_KEY": os.environ.get("OPENAI_API_KEY", "")
 }
 
+# ANTHROPIC
+anthropic = {
+    "API_KEY": os.environ.get("ANTHROPIC_API_KEY", "")
+}
+
+# TWELVE DATA
+twelvedata = {
+    "API_KEY": os.environ.get("TWELVE_DATA_API_KEY", "")
+}
+
+# MARKET ANALYSIS
+market = {
+    "CACHE_TTL": int(os.environ.get("MARKET_CACHE_TTL", 86400))
+}
+
 # TICKET / SUPORTE
 ticket = {
     "SUPPORT_EMAILS": os.environ.get("TICKET_SUPPORT_EMAILS", "dcamalionte@gmail.com")
