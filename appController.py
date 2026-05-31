@@ -19,4 +19,5 @@ from controller.WebhookAsaas import WebhookAsaasController
 from controller.Usuario import UsuarioController
 from controller.Chat import ChatController
 from controller.MarketAnalysis import MarketAnalysisPingController, MarketAnalyzeController, MarketCacheClearController, MarketDebugController
+from controller.TermoAceite import TermoAceiteController
 

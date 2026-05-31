@@ -44,14 +44,21 @@ class MarketAnalysisPingController(MethodView):
 
 class MarketAnalyzeController(MethodView):
     """
-    GET /market/analyze?contracts=10
+    GET /market/analyze?id_ativos_base=1&contracts=1
 
-    Retorna a análise do mercado com recomendação de operação.
-    O parâmetro `contracts` define o máximo de contratos — o sistema
-    recalcula a quantidade real com base no score e no nível do VIX.
+    id_ativos_base define o ativo analisado:
+      1 = Mini Índice (WIN)
+
+    contracts define o máximo de contratos — o sistema recalcula a quantidade
+    real com base no score e no nível do VIX.
     """
 
     def get(self):
+        try:
+            id_ativos_base = int(request.args.get("id_ativos_base", 0))
+        except (TypeError, ValueError):
+            return {"error": "Parâmetro 'id_ativos_base' deve ser um número inteiro"}, 400
+
         try:
             contracts = int(request.args.get("contracts", 1))
         except (TypeError, ValueError):
@@ -60,21 +67,38 @@ class MarketAnalyzeController(MethodView):
         if contracts < 1:
             return {"error": "Parâmetro 'contracts' deve ser >= 1"}, 400
 
-        rule = MarketAnalysisRule()
-        data, status = rule.analyze(contracts)
+        analyzer = MarketAnalysisRule.get(id_ativos_base)
+        if not analyzer:
+            return {
+                "error":     f"id_ativos_base={id_ativos_base} não suportado",
+                "supported": sorted(MarketAnalysisRule.SUPPORTED),
+            }, 400
+
+        data, status = analyzer.analyze(contracts)
         return data, status
 
 
 class MarketCacheClearController(MethodView):
     """
-    DELETE /market/cache
+    DELETE /market/cache?id_ativos_base=1
 
-    Limpa o cache da análise, forçando uma nova chamada na próxima requisição.
+    Limpa o cache do analyzer especificado, forçando nova chamada na próxima requisição.
     """
 
     def delete(self):
-        rule = MarketAnalysisRule()
-        data, status = rule.clear_cache()
+        try:
+            id_ativos_base = int(request.args.get("id_ativos_base", 0))
+        except (TypeError, ValueError):
+            return {"error": "Parâmetro 'id_ativos_base' deve ser um número inteiro"}, 400
+
+        analyzer = MarketAnalysisRule.get(id_ativos_base)
+        if not analyzer:
+            return {
+                "error":     f"id_ativos_base={id_ativos_base} não suportado",
+                "supported": sorted(MarketAnalysisRule.SUPPORTED),
+            }, 400
+
+        data, status = analyzer.clear_cache()
         return data, status
 
 
@@ -91,6 +115,6 @@ class MarketDebugController(MethodView):
         td = TwelveDataClient(memory.twelvedata["API_KEY"])
         yf = YahooFinanceClient()
         return {
-            "twelve_data_macro": td.debug_raw(),
-            "yahoo_ibov_technical": yf.get_ibov_technical(),
+            "twelve_data_macro":     td.debug_raw(),
+            "yahoo_ibov_technical":  yf.get_ibov_technical(),
         }, 200

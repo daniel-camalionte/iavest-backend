@@ -128,6 +128,9 @@ api.add_resource(appController.IpnMercadoPagoController, '/ipn/mercadopago')
 #Chat IA
 api.add_resource(appController.ChatController, '/chat')
 
+#Termo Aceite
+api.add_resource(appController.TermoAceiteController, '/termo-aceite')
+
 #Market Analysis
 api.add_resource(appController.MarketAnalysisPingController, '/market/ping')
 api.add_resource(appController.MarketAnalyzeController, '/market/analyze')

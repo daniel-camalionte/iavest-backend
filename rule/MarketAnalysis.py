@@ -1,19 +1,18 @@
 import time
 import json
+from abc import ABC, abstractmethod
 from datetime import datetime, date, timezone, timedelta
 
 import config.env as memory
 from library.HttpClient import HttpClient
 from library.TwelveDataClient import TwelveDataClient
 from library.YahooFinanceClient import YahooFinanceClient
+from model.MarketAnalysis import MarketAnalysisModel
 
 # ---------------------------------------------------------------------------
-# Cache in-memory
+# Cache in-memory — keyed by id_ativos_base
 # ---------------------------------------------------------------------------
-_cache = {
-    "data":      None,
-    "timestamp": None,
-}
+_cache = {}  # {id_ativos_base: {"data": None, "timestamp": None}}
 
 BRASILIA = timezone(timedelta(hours=-3))
 
@@ -52,10 +51,11 @@ def _is_b3_trading_day(dt: datetime) -> bool:
     holidays = B3_HOLIDAYS.get(d.year, [])
     return d not in holidays
 
+
 # ---------------------------------------------------------------------------
-# Prompt para o Claude
+# System prompt — WIN
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """Você é um analista quantitativo especialista no mercado futuro brasileiro, com foco no Mini Índice Bovespa (WIN).
+_WIN_SYSTEM_PROMPT = """Você é um analista quantitativo especialista no mercado futuro brasileiro, com foco no Mini Índice Bovespa (WIN).
 
 Sua tarefa é analisar os dados técnicos e macroeconômicos fornecidos e retornar um JSON estruturado com a análise completa.
 
@@ -255,7 +255,7 @@ def _format_technical_for_prompt(tech: dict) -> str:
 _WEEKDAYS_PT = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"]
 
 
-def _call_claude(macro, technical):
+def _call_claude(macro: dict, technical: dict, system_prompt: str):
     api_key  = memory.anthropic["API_KEY"]
     now_br   = datetime.now(tz=BRASILIA)
     weekday  = _WEEKDAYS_PT[now_br.weekday()]
@@ -264,21 +264,21 @@ def _call_claude(macro, technical):
         f"Data: {now_br.strftime('%Y-%m-%d')} ({weekday}) — horário Brasília: {now_br.strftime('%H:%M')}\n\n"
         "=== CONTEXTO MACROECONÔMICO ===\n"
         + _format_macro_for_prompt(macro) +
-        "\n\n=== DADOS TÉCNICOS — MINI ÍNDICE (WIN) / IBOVESPA ===\n"
+        "\n\n=== DADOS TÉCNICOS ===\n"
         + _format_technical_for_prompt(technical)
     )
 
     resp = HttpClient.post(
         "https://api.anthropic.com/v1/messages",
         headers={
-            "x-api-key":          api_key,
-            "anthropic-version":  "2023-06-01",
-            "content-type":       "application/json",
+            "x-api-key":         api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type":      "application/json",
         },
         payload={
             "model":      "claude-opus-4-5",
             "max_tokens": 2048,
-            "system":     SYSTEM_PROMPT,
+            "system":     system_prompt,
             "messages":   [{"role": "user", "content": user_content}],
         },
         timeout=60,
@@ -289,7 +289,6 @@ def _call_claude(macro, technical):
 
     raw_text = resp["data"]["content"][0]["text"].strip()
 
-    # Remove blocos markdown se Claude enviar mesmo assim
     if raw_text.startswith("```"):
         raw_text = raw_text.split("```")[1]
         if raw_text.startswith("json"):
@@ -302,9 +301,15 @@ def _call_claude(macro, technical):
 
 
 # ---------------------------------------------------------------------------
-# Rule
+# Base analyzer — template method compartilhado por todos os ativos
 # ---------------------------------------------------------------------------
-class MarketAnalysisRule:
+class BaseMarketAnalyzer(ABC):
+    id_ativos_base: int = None
+
+    def _cache_bucket(self) -> dict:
+        if self.id_ativos_base not in _cache:
+            _cache[self.id_ativos_base] = {"data": None, "timestamp": None}
+        return _cache[self.id_ativos_base]
 
     def analyze(self, max_contracts: int):
         now_br = datetime.now(tz=BRASILIA)
@@ -312,49 +317,41 @@ class MarketAnalysisRule:
             weekday_names = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"]
             return {
                 "trading_day": False,
-                "date": now_br.strftime("%Y-%m-%d"),
-                "weekday": weekday_names[now_br.weekday()],
-                "message": "B3 não opera hoje. Análise disponível apenas em dias úteis.",
+                "date":        now_br.strftime("%Y-%m-%d"),
+                "weekday":     weekday_names[now_br.weekday()],
+                "message":     "B3 não opera hoje. Análise disponível apenas em dias úteis.",
             }, 200
 
-        ttl = memory.market["CACHE_TTL"]
-        now = time.time()
+        ttl    = memory.market["CACHE_TTL"]
+        now    = time.time()
+        bucket = self._cache_bucket()
 
         # --- Cache HIT ---
-        if _cache["data"] and _cache["timestamp"] and (now - _cache["timestamp"]) < ttl:
-            cached = _cache["data"]
-            vix_lv = cached["macro_context"]["vxx"]["vix_level"]
-            contracts = _calculate_contracts(cached["score"]["total"], max_contracts, vix_lv)
-            expires_at = datetime.fromtimestamp(_cache["timestamp"] + ttl, tz=BRASILIA).strftime("%Y-%m-%dT%H:%M:%S")
+        if bucket["data"] and bucket["timestamp"] and (now - bucket["timestamp"]) < ttl:
+            cached     = bucket["data"]
+            vix_lv     = cached["macro_context"]["vxx"]["vix_level"]
+            contracts  = _calculate_contracts(cached["score"]["total"], max_contracts, vix_lv)
+            expires_at = datetime.fromtimestamp(bucket["timestamp"] + ttl, tz=BRASILIA).strftime("%Y-%m-%dT%H:%M:%S")
             return {
                 **cached,
-                "contracts": contracts,
-                "cached": True,
+                "contracts":        contracts,
+                "cached":           True,
                 "cache_expires_at": expires_at,
             }, 200
 
-        # --- Cache MISS: coleta dados ---
-        td        = TwelveDataClient(memory.twelvedata["API_KEY"])
-        yf        = YahooFinanceClient()
-        macro     = td.get_macro_quotes()
-        futures   = yf.get_yahoo_macro_quotes()
-        macro.update(futures)
-        technical = yf.get_ibov_technical()
+        # --- Cache MISS ---
+        macro, technical = self._fetch_data()
 
-        # Aborta se a coleta de dados falhou por rate limit ou auth
         if "_error" in macro:
-            err = macro["_error"]
-            return {"error": "Falha ao coletar dados macro", "detail": err}, 503
+            return {"error": "Falha ao coletar dados macro", "detail": macro["_error"]}, 503
         if technical.get("_error") and technical.get("price") is None:
-            err = technical["_error"]
-            return {"error": "Falha ao coletar dados técnicos", "detail": err}, 503
+            return {"error": "Falha ao coletar dados técnicos", "detail": technical["_error"]}, 503
 
-        vix_price = macro.get("vxx", {}).get("price", 0)
-        vix_lv    = _vix_level(vix_price)
+        vix_price              = macro.get("vxx", {}).get("price", 0)
+        vix_lv                 = _vix_level(vix_price)
         macro["vxx"]["vix_level"] = vix_lv
 
-        # --- Chama Claude ---
-        claude_result = _call_claude(macro, technical)
+        claude_result = _call_claude(macro, technical, self._get_system_prompt())
         if not claude_result:
             return {"error": "Falha ao processar análise com Claude"}, 500
 
@@ -363,8 +360,8 @@ class MarketAnalysisRule:
         now_dt      = datetime.now(tz=BRASILIA)
 
         payload = {
-            "date":         now_dt.strftime("%Y-%m-%d"),
-            "generated_at": now_dt.strftime("%H:%M"),
+            "date":              now_dt.strftime("%Y-%m-%d"),
+            "generated_at":      now_dt.strftime("%H:%M"),
             "recommendation":    claude_result.get("recommendation"),
             "contracts":         contracts,
             "confidence":        claude_result.get("confidence"),
@@ -373,25 +370,196 @@ class MarketAnalysisRule:
                 "technical": claude_result.get("score_technical"),
                 "macro":     claude_result.get("score_macro"),
             },
-            "ia":              claude_result.get("ia"),
-            "technical_data":  technical,
+            "ia":                claude_result.get("ia"),
+            "technical_data":    technical,
             "technical_signals": claude_result.get("technical_signals"),
-            "market_context":  claude_result.get("market_context"),
-            "macro_context":   macro,
-            "macro_signals":   claude_result.get("macro_signals"),
-            "narrative":       claude_result.get("narrative"),
-            "cached":          False,
+            "market_context":    claude_result.get("market_context"),
+            "macro_context":     macro,
+            "macro_signals":     claude_result.get("macro_signals"),
+            "activation_price":  claude_result.get("activation_price"),
+            "blind_spots":       claude_result.get("blind_spots"),
+            "narrative":         claude_result.get("narrative"),
+            "cached":            False,
             "cache_ttl_minutes": ttl // 60,
             "cache_expires_at":  datetime.fromtimestamp(now + ttl, tz=BRASILIA).strftime("%Y-%m-%dT%H:%M:%S"),
         }
 
-        # Armazena cache (sem o campo contracts, que é recalculado por request)
-        _cache["data"]      = {k: v for k, v in payload.items() if k != "contracts"}
-        _cache["timestamp"] = now
+        bucket["data"]      = {k: v for k, v in payload.items() if k != "contracts"}
+        bucket["timestamp"] = now
+
+        self._save_analysis(claude_result, technical, macro, contracts, now_dt, payload)
 
         return payload, 200
 
+    def _save_analysis(self, claude_result: dict, technical: dict, macro: dict, contracts: int, now_dt: datetime, payload: dict):
+        try:
+            ts   = claude_result.get("technical_signals") or {}
+            ctx  = claude_result.get("market_context")    or {}
+            ms   = claude_result.get("macro_signals")     or {}
+            ap   = claude_result.get("activation_price")  or {}
+            ia   = claude_result.get("ia")                or {}
+            macd = technical.get("macd")                  or {}
+            bb   = technical.get("bbands")                or {}
+            adx  = technical.get("adx")                   or {}
+
+            def _mc(key, field):
+                return macro.get(key, {}).get(field)
+
+            record = {
+                "id_ativos_base":      self.id_ativos_base,
+                "analyzed_at":         now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+
+                "recommendation":      claude_result.get("recommendation"),
+                "confidence":          claude_result.get("confidence"),
+                "contracts":           contracts,
+                "ia_buy":              1 if ia.get("buy") else 0,
+                "ia_sell":             1 if ia.get("sell") else 0,
+
+                "score_total":         claude_result.get("score_total"),
+                "score_technical":     claude_result.get("score_technical"),
+                "score_macro":         claude_result.get("score_macro"),
+
+                "sig_sma9":            ts.get("sma9"),
+                "sig_sma21":           ts.get("sma21"),
+                "sig_sma50":           ts.get("sma50"),
+                "sig_ema_cross":       ts.get("ema_cross"),
+                "sig_rsi":             ts.get("rsi"),
+                "sig_macd":            ts.get("macd"),
+                "sig_bbands":          ts.get("bbands"),
+                "sig_adx":             ts.get("adx"),
+                "sig_obv":             ts.get("obv"),
+
+                "ctx_opening_gap":     ctx.get("opening_gap"),
+                "ctx_consecutive_days": ctx.get("consecutive_days"),
+                "ctx_momentum":        ctx.get("momentum"),
+
+                "msig_spy":            ms.get("spy"),
+                "msig_qqq":            ms.get("qqq"),
+                "msig_dia":            ms.get("dia"),
+                "msig_es1":            ms.get("es1"),
+                "msig_nq1":            ms.get("nq1"),
+                "msig_uso":            ms.get("uso"),
+                "msig_vxx":            ms.get("vxx"),
+                "msig_usdbrl":         ms.get("usdbrl"),
+                "msig_dxy":            ms.get("dxy"),
+                "msig_ewz":            ms.get("ewz"),
+                "msig_pbr":            ms.get("pbr"),
+                "msig_vale":           ms.get("vale"),
+
+                "ap_trigger":          ap.get("trigger"),
+                "ap_buy_trigger":      ap.get("buy_trigger"),
+                "ap_sell_trigger":     ap.get("sell_trigger"),
+                "ap_description":      ap.get("description"),
+
+                "td_price":            technical.get("price"),
+                "td_prev_close":       technical.get("prev_close"),
+                "td_prev_high":        technical.get("prev_high"),
+                "td_prev_low":         technical.get("prev_low"),
+                "td_opening_gap_pct":  technical.get("opening_gap_pct"),
+                "td_consecutive_days": technical.get("consecutive_days"),
+                "td_volume":           technical.get("volume"),
+                "td_obv":              technical.get("obv"),
+                "td_sma9":             technical.get("sma9"),
+                "td_sma21":            technical.get("sma21"),
+                "td_sma50":            technical.get("sma50"),
+                "td_sma200":           technical.get("sma200"),
+                "td_ema9":             technical.get("ema9"),
+                "td_ema21":            technical.get("ema21"),
+                "td_rsi":              technical.get("rsi"),
+                "td_macd":             macd.get("macd"),
+                "td_macd_signal":      macd.get("signal"),
+                "td_macd_histogram":   macd.get("histogram"),
+                "td_bb_upper":         bb.get("upper"),
+                "td_bb_middle":        bb.get("middle"),
+                "td_bb_lower":         bb.get("lower"),
+                "td_adx":              adx.get("adx"),
+                "td_plus_di":          adx.get("plus_di"),
+                "td_minus_di":         adx.get("minus_di"),
+
+                "mc_spy_price":        _mc("spy",    "price"),
+                "mc_spy_pct":          _mc("spy",    "percent_change"),
+                "mc_qqq_price":        _mc("qqq",    "price"),
+                "mc_qqq_pct":          _mc("qqq",    "percent_change"),
+                "mc_dia_price":        _mc("dia",    "price"),
+                "mc_dia_pct":          _mc("dia",    "percent_change"),
+                "mc_es1_price":        _mc("es1",    "price"),
+                "mc_es1_pct":          _mc("es1",    "percent_change"),
+                "mc_nq1_price":        _mc("nq1",    "price"),
+                "mc_nq1_pct":          _mc("nq1",    "percent_change"),
+                "mc_uso_price":        _mc("uso",    "price"),
+                "mc_uso_pct":          _mc("uso",    "percent_change"),
+                "mc_vxx_price":        _mc("vxx",    "price"),
+                "mc_vxx_pct":          _mc("vxx",    "percent_change"),
+                "mc_vxx_level":        _mc("vxx",    "vix_level"),
+                "mc_usdbrl_price":     _mc("usdbrl", "price"),
+                "mc_usdbrl_pct":       _mc("usdbrl", "percent_change"),
+                "mc_dxy_price":        _mc("dxy",    "price"),
+                "mc_dxy_pct":          _mc("dxy",    "percent_change"),
+                "mc_ewz_price":        _mc("ewz",    "price"),
+                "mc_ewz_pct":          _mc("ewz",    "percent_change"),
+                "mc_pbr_price":        _mc("pbr",    "price"),
+                "mc_pbr_pct":          _mc("pbr",    "percent_change"),
+                "mc_vale_price":       _mc("vale",   "price"),
+                "mc_vale_pct":         _mc("vale",   "percent_change"),
+
+                "blind_spots":         json.dumps(claude_result.get("blind_spots") or []),
+                "narrative":           claude_result.get("narrative", ""),
+                "payload_json":        json.dumps(payload),
+            }
+
+            MarketAnalysisModel().save(record)
+        except Exception:
+            pass  # falha no save não deve interromper a resposta ao cliente
+
     def clear_cache(self):
-        _cache["data"]      = None
-        _cache["timestamp"] = None
+        bucket             = self._cache_bucket()
+        bucket["data"]     = None
+        bucket["timestamp"] = None
         return {"cleared": True, "message": "Cache limpo com sucesso"}, 200
+
+    @abstractmethod
+    def _fetch_data(self) -> tuple:
+        """Retorna (macro: dict, technical: dict) para o ativo específico."""
+
+    @abstractmethod
+    def _get_system_prompt(self) -> str:
+        """Retorna o system prompt do Claude para o ativo específico."""
+
+
+# ---------------------------------------------------------------------------
+# WIN — Mini Índice Bovespa (id_ativos_base=1)
+# ---------------------------------------------------------------------------
+class WINAnalyzer(BaseMarketAnalyzer):
+    id_ativos_base = 1
+
+    def _fetch_data(self):
+        td      = TwelveDataClient(memory.twelvedata["API_KEY"])
+        yf      = YahooFinanceClient()
+        macro   = td.get_macro_quotes()
+        futures = yf.get_yahoo_macro_quotes()
+        macro.update(futures)
+        technical = yf.get_ibov_technical()
+        return macro, technical
+
+    def _get_system_prompt(self):
+        return _WIN_SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# Registry e factory
+# ---------------------------------------------------------------------------
+_ANALYZERS = {
+    1: WINAnalyzer,
+    # 2: WDOAnalyzer,  # adicionar quando implementado
+}
+
+
+class MarketAnalysisRule:
+    """Factory — retorna o analyzer correto para cada id_ativos_base."""
+
+    SUPPORTED = frozenset(_ANALYZERS.keys())
+
+    @staticmethod
+    def get(id_ativos_base: int):
+        cls = _ANALYZERS.get(id_ativos_base)
+        return cls() if cls else None

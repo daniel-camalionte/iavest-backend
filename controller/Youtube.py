@@ -22,6 +22,7 @@ class VideosCacheClearController(MethodView):
         try:
             youtube_rule._cache["data"] = None
             youtube_rule._cache["at"] = 0
+            youtube_rule._cache["channel_id"] = None
             return {"success": True, "message": "Cache limpo com sucesso"}, 200
 
         except Exception as e:

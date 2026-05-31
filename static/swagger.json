@@ -76,8 +76,16 @@
       "description": "Dados cadastrais do usuário logado"
     },
     {
+      "name": "Chat IA",
+      "description": "Chat com IA via OpenAI"
+    },
+    {
       "name": "Market Analysis",
-      "description": "Análise de mercado do Mini Índice Bovespa com IA (Claude Opus 4)"
+      "description": "Análise de mercado com IA (Claude Opus 4) — WIN, WDO e futuros ativos"
+    },
+    {
+      "name": "Termo Aceite",
+      "description": "Registro de aceite de termos pelo usuário"
     }
   ],
   "schemes": [
@@ -85,6 +93,46 @@
     "http"
   ],
   "paths": {
+    "/termo-aceite": {
+      "post": {
+        "tags": ["Termo Aceite"],
+        "summary": "Registrar aceite de termo",
+        "description": "Registra o aceite de um termo pelo usuário autenticado. O IP é capturado automaticamente via X-Forwarded-For ou request.ip. Requer Bearer token JWT.",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": { "$ref": "#/definitions/TermoAceiteRequest" }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Aceite registrado com sucesso",
+            "schema": { "$ref": "#/definitions/TermoAceiteResponse" }
+          },
+          "400": {
+            "description": "Parâmetros inválidos",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error":   { "type": "string" },
+                "aceitos": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    },
     "/market/ping": {
       "get": {
         "tags": ["Market Analysis"],
@@ -111,10 +159,18 @@
     "/market/analyze": {
       "get": {
         "tags": ["Market Analysis"],
-        "summary": "Análise de mercado do Mini Índice",
-        "description": "Coleta dados macroeconômicos (SPY, QQQ, DIA, USO, VXX, USD/BRL) e indicadores técnicos do Mini Índice Bovespa via Twelve Data, envia para o Claude Opus 4 e retorna recomendação de operação (COMPRA, VENDA ou INDEFINIÇÃO) com quantidade de contratos ajustada ao score e ao nível do VIX. Resultado é cacheado por TTL configurável (padrão 1h).",
+        "summary": "Análise de mercado com IA",
+        "description": "Coleta dados macroeconômicos (SPY, QQQ, DIA, ES1!, NQ1!, USO, VXX, USD/BRL, DXY, EWZ, PBR, VALE) e indicadores técnicos do ativo via Yahoo Finance, envia para o Claude Opus 4 e retorna recomendação de operação (COMPRA, VENDA ou INDEFINIÇÃO) com contratos ajustados ao score e VIX. Resultado é cacheado por TTL configurável (padrão 24h). A análise também é persistida na tabela market_analysis.",
         "produces": ["application/json"],
         "parameters": [
+          {
+            "name": "id_ativos_base",
+            "in": "query",
+            "required": true,
+            "type": "integer",
+            "description": "ID do ativo a analisar. 1 = Mini Índice (WIN).",
+            "example": 1
+          },
           {
             "name": "contracts",
             "in": "query",
@@ -128,61 +184,11 @@
         "responses": {
           "200": {
             "description": "Análise gerada ou recuperada do cache",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "date":            { "type": "string",  "example": "2026-03-24" },
-                "generated_at":    { "type": "string",  "example": "08:21" },
-                "recommendation":  { "type": "string",  "enum": ["COMPRA", "VENDA", "INDEFINIÇÃO"] },
-                "contracts":       { "type": "integer", "example": 6 },
-                "confidence":      { "type": "string",  "enum": ["ALTA", "MEDIA", "BAIXA"] },
-                "score": {
-                  "type": "object",
-                  "properties": {
-                    "total":     { "type": "integer", "example": 64 },
-                    "technical": { "type": "integer", "example": 78 },
-                    "macro":     { "type": "integer", "example": 32 }
-                  }
-                },
-                "ia": {
-                  "type": "object",
-                  "properties": {
-                    "buy":  { "type": "boolean", "example": true },
-                    "sell": { "type": "boolean", "example": false }
-                  }
-                },
-                "technical_signals": {
-                  "type": "object",
-                  "properties": {
-                    "sma9":      { "type": "string", "example": "COMPRA" },
-                    "sma21":     { "type": "string", "example": "COMPRA" },
-                    "sma50":     { "type": "string", "example": "COMPRA" },
-                    "ema_cross": { "type": "string", "example": "GOLDEN_CROSS" },
-                    "rsi":       { "type": "string", "example": "NEUTRO" },
-                    "macd":      { "type": "string", "example": "VENDA" },
-                    "bbands":    { "type": "string", "example": "COMPRA" }
-                  }
-                },
-                "macro_signals": {
-                  "type": "object",
-                  "properties": {
-                    "spy":    { "type": "string", "example": "POSITIVO" },
-                    "qqq":    { "type": "string", "example": "NEUTRO" },
-                    "dia":    { "type": "string", "example": "NEUTRO" },
-                    "uso":    { "type": "string", "example": "NEGATIVO" },
-                    "vxx":    { "type": "string", "example": "ALTO" },
-                    "usdbrl": { "type": "string", "example": "NEUTRO" }
-                  }
-                },
-                "narrative":         { "type": "string", "example": "O S&P 500 avançou 1,05%..." },
-                "cached":            { "type": "boolean", "example": false },
-                "cache_ttl_minutes": { "type": "integer", "example": 60 },
-                "cache_expires_at":  { "type": "string",  "example": "2026-03-24T09:21:00" }
-              }
-            }
+            "schema": { "$ref": "#/definitions/MarketAnalysisResponse" }
           },
-          "400": { "description": "Parâmetro 'contracts' inválido" },
-          "500": { "description": "Erro ao coletar dados ou processar análise com Claude" }
+          "400": { "description": "Parâmetro inválido ou id_ativos_base não suportado" },
+          "500": { "description": "Erro ao coletar dados ou processar análise com Claude" },
+          "503": { "description": "Falha ao coletar dados macro ou técnicos das APIs externas" }
         }
       }
     },
@@ -213,8 +219,18 @@
       "delete": {
         "tags": ["Market Analysis"],
         "summary": "Limpar cache da análise",
-        "description": "Remove o cache da última análise, forçando uma nova coleta de dados e chamada ao Claude na próxima requisição de /market/analyze.",
+        "description": "Remove o cache do ativo especificado, forçando nova coleta de dados e chamada ao Claude na próxima requisição.",
         "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "id_ativos_base",
+            "in": "query",
+            "required": true,
+            "type": "integer",
+            "description": "ID do ativo cujo cache será limpo. 1 = Mini Índice (WIN).",
+            "example": 1
+          }
+        ],
         "responses": {
           "200": {
             "description": "Cache limpo com sucesso",
@@ -225,7 +241,8 @@
                 "message": { "type": "string",  "example": "Cache limpo com sucesso" }
               }
             }
-          }
+          },
+          "400": { "description": "id_ativos_base inválido ou não suportado" }
         }
       }
     },
@@ -1696,6 +1713,183 @@
     }
   },
   "definitions": {
+    "TermoAceiteRequest": {
+      "type": "object",
+      "required": ["tipo_aceite", "termo_versao"],
+      "properties": {
+        "tipo_aceite":  { "type": "string", "enum": ["cadastro", "assinatura"], "example": "cadastro" },
+        "termo_versao": { "type": "string", "example": "1.0" }
+      }
+    },
+    "TermoAceiteResponse": {
+      "type": "object",
+      "properties": {
+        "id_termo_aceite": { "type": "integer", "example": 1 },
+        "status":          { "type": "string",  "example": "aceito" }
+      }
+    },
+    "MarketAnalysisResponse": {
+      "type": "object",
+      "properties": {
+        "date":           { "type": "string",  "example": "2026-05-04" },
+        "generated_at":   { "type": "string",  "example": "09:30" },
+        "recommendation": { "type": "string",  "enum": ["COMPRA", "VENDA", "INDEFINIÇÃO"], "example": "COMPRA" },
+        "contracts":      { "type": "integer", "example": 6 },
+        "confidence":     { "type": "string",  "enum": ["ALTA", "MEDIA", "BAIXA"], "example": "MEDIA" },
+        "cached":         { "type": "boolean", "example": false },
+        "cache_ttl_minutes": { "type": "integer", "example": 1440 },
+        "cache_expires_at":  { "type": "string",  "example": "2026-05-05T09:30:00" },
+        "score": {
+          "type": "object",
+          "properties": {
+            "total":     { "type": "integer", "example": 68 },
+            "technical": { "type": "integer", "example": 75 },
+            "macro":     { "type": "integer", "example": 54 }
+          }
+        },
+        "ia": {
+          "type": "object",
+          "properties": {
+            "buy":  { "type": "boolean", "example": true },
+            "sell": { "type": "boolean", "example": false }
+          }
+        },
+        "technical_signals": {
+          "type": "object",
+          "properties": {
+            "sma9":      { "type": "string", "enum": ["COMPRA", "VENDA", "N/D"], "example": "COMPRA" },
+            "sma21":     { "type": "string", "enum": ["COMPRA", "VENDA", "N/D"], "example": "COMPRA" },
+            "sma50":     { "type": "string", "enum": ["COMPRA", "VENDA", "N/D"], "example": "COMPRA" },
+            "ema_cross": { "type": "string", "enum": ["GOLDEN_CROSS", "DEATH_CROSS", "N/D"], "example": "GOLDEN_CROSS" },
+            "rsi":       { "type": "string", "enum": ["COMPRA", "NEUTRO", "VENDA", "N/D"], "example": "NEUTRO" },
+            "macd":      { "type": "string", "enum": ["COMPRA", "VENDA", "N/D"], "example": "COMPRA" },
+            "bbands":    { "type": "string", "enum": ["COMPRA", "VENDA", "N/D"], "example": "COMPRA" },
+            "adx":       { "type": "string", "enum": ["TENDENCIA_FORTE", "TENDENCIA_FRACA", "N/D"], "example": "TENDENCIA_FORTE" },
+            "obv":       { "type": "string", "enum": ["CONFIRMACAO", "DIVERGENCIA", "N/D"], "example": "CONFIRMACAO" }
+          }
+        },
+        "market_context": {
+          "type": "object",
+          "properties": {
+            "opening_gap":      { "type": "string", "enum": ["POSITIVO", "NEUTRO", "NEGATIVO"], "example": "POSITIVO" },
+            "consecutive_days": { "type": "integer", "example": 3 },
+            "momentum":         { "type": "string", "enum": ["FORTE_ALTA", "LEVE_ALTA", "NEUTRO", "LEVE_BAIXA", "FORTE_BAIXA"], "example": "LEVE_ALTA" }
+          }
+        },
+        "macro_signals": {
+          "type": "object",
+          "properties": {
+            "spy":    { "type": "string", "enum": ["POSITIVO", "NEUTRO", "NEGATIVO"], "example": "POSITIVO" },
+            "qqq":    { "type": "string", "enum": ["POSITIVO", "NEUTRO", "NEGATIVO"], "example": "POSITIVO" },
+            "dia":    { "type": "string", "enum": ["POSITIVO", "NEUTRO", "NEGATIVO"], "example": "NEUTRO" },
+            "es1":    { "type": "string", "enum": ["POSITIVO", "NEUTRO", "NEGATIVO"], "example": "POSITIVO" },
+            "nq1":    { "type": "string", "enum": ["POSITIVO", "NEUTRO", "NEGATIVO"], "example": "POSITIVO" },
+            "uso":    { "type": "string", "enum": ["POSITIVO", "NEUTRO", "NEGATIVO"], "example": "NEUTRO" },
+            "vxx":    { "type": "string", "enum": ["BAIXO", "MEDIO", "ALTO"], "example": "BAIXO" },
+            "usdbrl": { "type": "string", "enum": ["POSITIVO", "NEUTRO", "NEGATIVO"], "example": "NEUTRO" },
+            "dxy":    { "type": "string", "enum": ["POSITIVO", "NEUTRO", "NEGATIVO"], "example": "NEUTRO" },
+            "ewz":    { "type": "string", "enum": ["POSITIVO", "NEUTRO", "NEGATIVO"], "example": "POSITIVO" },
+            "pbr":    { "type": "string", "enum": ["POSITIVO", "NEUTRO", "NEGATIVO"], "example": "POSITIVO" },
+            "vale":   { "type": "string", "enum": ["POSITIVO", "NEUTRO", "NEGATIVO"], "example": "NEUTRO" }
+          }
+        },
+        "activation_price": {
+          "type": "object",
+          "properties": {
+            "trigger":      { "type": "number", "example": null },
+            "buy_trigger":  { "type": "number", "example": 132500.00 },
+            "sell_trigger": { "type": "number", "example": 130200.00 },
+            "description":  { "type": "string", "example": "Compra acima da SMA21; venda abaixo da mínima D-1" }
+          }
+        },
+        "blind_spots": {
+          "type": "array",
+          "items": { "type": "string" },
+          "example": ["PBR e VALE com variação 0% — dados do fechamento anterior, sem pré-mercado disponível"]
+        },
+        "technical_data": {
+          "type": "object",
+          "description": "Dados técnicos brutos coletados do Yahoo Finance",
+          "properties": {
+            "price":            { "type": "number", "example": 131200.00 },
+            "prev_close":       { "type": "number", "example": 130500.00 },
+            "prev_high":        { "type": "number", "example": 131000.00 },
+            "prev_low":         { "type": "number", "example": 129800.00 },
+            "opening_gap_pct":  { "type": "number", "example": 0.54 },
+            "consecutive_days": { "type": "integer", "example": 3 },
+            "volume":           { "type": "integer", "example": 1850000 },
+            "obv":              { "type": "integer", "example": 45200000 },
+            "sma9":             { "type": "number", "example": 130800.00 },
+            "sma21":            { "type": "number", "example": 130200.00 },
+            "sma50":            { "type": "number", "example": 128500.00 },
+            "sma200":           { "type": "number", "example": 122000.00 },
+            "ema9":             { "type": "number", "example": 130950.00 },
+            "ema21":            { "type": "number", "example": 130300.00 },
+            "rsi":              { "type": "number", "example": 56.4 },
+            "macd": {
+              "type": "object",
+              "properties": {
+                "macd":      { "type": "number", "example": 420.5 },
+                "signal":    { "type": "number", "example": 310.2 },
+                "histogram": { "type": "number", "example": 110.3 }
+              }
+            },
+            "bbands": {
+              "type": "object",
+              "properties": {
+                "upper":  { "type": "number", "example": 133500.00 },
+                "middle": { "type": "number", "example": 130200.00 },
+                "lower":  { "type": "number", "example": 126900.00 }
+              }
+            },
+            "adx": {
+              "type": "object",
+              "properties": {
+                "adx":      { "type": "number", "example": 28.5 },
+                "plus_di":  { "type": "number", "example": 31.2 },
+                "minus_di": { "type": "number", "example": 17.8 }
+              }
+            }
+          }
+        },
+        "macro_context": {
+          "type": "object",
+          "description": "Preços e variações dos ativos macro coletados do Twelve Data e Yahoo Finance",
+          "properties": {
+            "spy":    { "$ref": "#/definitions/MacroAssetItem" },
+            "qqq":    { "$ref": "#/definitions/MacroAssetItem" },
+            "dia":    { "$ref": "#/definitions/MacroAssetItem" },
+            "es1":    { "$ref": "#/definitions/MacroAssetItem" },
+            "nq1":    { "$ref": "#/definitions/MacroAssetItem" },
+            "uso":    { "$ref": "#/definitions/MacroAssetItem" },
+            "vxx":    { "$ref": "#/definitions/MacroAssetVxx" },
+            "usdbrl": { "$ref": "#/definitions/MacroAssetItem" },
+            "dxy":    { "$ref": "#/definitions/MacroAssetItem" },
+            "ewz":    { "$ref": "#/definitions/MacroAssetItem" },
+            "pbr":    { "$ref": "#/definitions/MacroAssetItem" },
+            "vale":   { "$ref": "#/definitions/MacroAssetItem" }
+          }
+        },
+        "narrative": { "type": "string", "example": "O Ibovespa abre em gap positivo sustentado pelo avanço do S&P 500..." }
+      }
+    },
+    "MacroAssetItem": {
+      "type": "object",
+      "properties": {
+        "name":           { "type": "string",  "example": "S&P 500 ETF (SPY)" },
+        "price":          { "type": "number",  "example": 521.30 },
+        "percent_change": { "type": "number",  "example": 0.82 }
+      }
+    },
+    "MacroAssetVxx": {
+      "type": "object",
+      "properties": {
+        "name":           { "type": "string", "example": "VIX (VXX)" },
+        "price":          { "type": "number", "example": 17.4 },
+        "percent_change": { "type": "number", "example": -1.2 },
+        "vix_level":      { "type": "string", "enum": ["BAIXO", "MEDIO", "ALTO"], "example": "BAIXO" }
+      }
+    },
     "MetatraderLoginRequest": {
       "type": "string",
       "example": "{\"id_estrategia\": 1, \"account_number\": 12345678, \"password\": \"senha123\"}",

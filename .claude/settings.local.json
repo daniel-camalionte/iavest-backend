@@ -46,7 +46,25 @@
       "Read(//c/GIT/iavest/iavest-backend/**)",
       "Bash(done)",
       "Bash(xargs grep -l \"videos.list\\\\|videos_list\\\\|youtube\")",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(Get-ChildItem -Path \"c:\\\\GIT\\\\iavest\\\\iavest-backend\" -Recurse -File -Name)",
+      "Bash(Select-Object -First 50)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Edit",
+      "Write",
+      "Bash(dir \"C:\\\\Users\\\\Japinguinha\\\\Downloads\" /b)",
+      "Bash(findstr /i pdf)",
+      "Bash(findstr /i \"sirius selene forecast\")",
+      "Bash(findstr /i \"sirius\")",
+      "Bash(findstr /i \"forecast\")",
+      "Bash(findstr /i \"selene\")",
+      "Bash(Get-ChildItem \"C:\\\\Users\\\\Japinguinha\\\\Downloads\" -Filter \"*sirius*\" -Recurse -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem \"C:\\\\Users\\\\Japinguinha\\\\Downloads\" -Filter \"*forecast*\" -Recurse -ErrorAction SilentlyContinue)",
+      "Bash(Get-ChildItem \"C:\\\\Users\\\\Japinguinha\\\\Downloads\" -Filter \"*selene*\" -Recurse -ErrorAction SilentlyContinue)",
+      "WebFetch(domain:www.youtube.com)",
+      "Bash(del \"c:\\\\GIT\\\\iavest\\\\iavest-backend\\\\model\\\\IaSazonalidade.py\")"
     ]
   }
 }
