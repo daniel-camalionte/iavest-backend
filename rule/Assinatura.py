@@ -110,6 +110,29 @@ class AssinaturaRule():
             "assinatura_id": id_assinatura
         }, 200
 
+    def _pendente_asaas(self, id_usuario):
+        pendente = AssinaturaModel() \
+            .where(['id_usuario', '=', id_usuario]) \
+            .where(['status',    '=', 'pending']) \
+            .where(['gateway',   '=', 'asaas']).find()
+        if pendente:
+            return {
+                "gateway":     "asaas",
+                "invoice_url": pendente[0].get("checkout_url", "")
+            }
+        return None
+
+    def _plano_recursos(self, id_plano):
+        plano_data = PlanoModel().find_one(id_plano)
+        plano      = plano_data[0] if plano_data else {}
+        recursos   = []
+        if plano.get("recursos"):
+            try:
+                recursos = json.loads(plano["recursos"])
+            except Exception:
+                recursos = []
+        return plano, recursos
+
     def status(self, id_usuario):
         modAssinatura = AssinaturaModel()
 
@@ -117,96 +140,81 @@ class AssinaturaRule():
         assinatura = modAssinatura.where(['id_usuario', '=', id_usuario]) \
                                   .where(['status', '=', 'active']).find()
 
-        if not assinatura:
-            # 2º verificar pendente Asaas
-            pendente = modAssinatura.where(['id_usuario', '=', id_usuario]) \
-                                    .where(['status', '=', 'pending']) \
-                                    .where(['gateway', '=', 'asaas']).find()
+        if assinatura:
+            ass              = assinatura[0]
+            plano, recursos  = self._plano_recursos(ass["id_plano"])
+            pendente         = self._pendente_asaas(id_usuario)
+
+            resp = {
+                "success":        True,
+                "tem_assinatura": True,
+                "assinatura": {
+                    "id":                    ass["id_assinatura"],
+                    "id_plano":              ass["id_plano"],
+                    "plano_nome":            plano.get("nome", ""),
+                    "plano_tipo":            plano.get("tipo", 0),
+                    "status":                ass["status"],
+                    "trial":                 False,
+                    "data_inicio":           str(ass["data_inicio"]) if ass.get("data_inicio") else None,
+                    "data_proxima_cobranca": str(ass["data_proxima_cobranca"]) if ass.get("data_proxima_cobranca") else None,
+                    "recursos":              recursos,
+                }
+            }
             if pendente:
-                return {
-                    "success": True,
-                    "tem_assinatura": False,
-                    "pendente": {
-                        "gateway": "asaas",
-                        "invoice_url": pendente[0].get("checkout_url", "")
-                    }
-                }, 200
+                resp["pendente"] = pendente
+            return resp, 200
 
-            # 3º verificar trial
-            trial = modAssinatura.where(['id_usuario', '=', id_usuario]) \
-                                  .where(['status', '=', 'trial']).find()
-            if trial:
-                ass = trial[0]
-                trial_ends = ass.get("trial_ends_at")
-                agora      = datetime.now()
-                ativo      = trial_ends and trial_ends > agora
-                dias_rest  = (trial_ends - agora).days if ativo else 0
+        # 2º trial
+        trial = modAssinatura.where(['id_usuario', '=', id_usuario]) \
+                              .where(['status', '=', 'trial']).find()
+        if trial:
+            ass        = trial[0]
+            trial_ends = ass.get("trial_ends_at")
+            agora      = datetime.now()
+            ativo      = trial_ends and trial_ends > agora
+            dias_rest  = (trial_ends - agora).days if ativo else 0
 
-                if not ativo:
-                    return {
-                        "success":        True,
-                        "tem_assinatura": False,
-                        "trial_expirado": True,
-                        "mensagem":       "Seu período gratuito encerrou. Assine um plano para continuar."
-                    }, 200
-
-                modPlano  = PlanoModel()
-                plano_data = modPlano.find_one(ass["id_plano"])
-                plano      = plano_data[0] if plano_data else {}
-                recursos   = []
-                if plano.get("recursos"):
-                    try:
-                        recursos = json.loads(plano["recursos"])
-                    except:
-                        recursos = []
-
+            if not ativo:
                 return {
                     "success":        True,
-                    "tem_assinatura": True,
-                    "assinatura": {
-                        "id":             ass["id_assinatura"],
-                        "id_plano":       ass["id_plano"],
-                        "plano_nome":     plano.get("nome", ""),
-                        "plano_tipo":     plano.get("tipo", 0),
-                        "status":         "trial",
-                        "trial":          True,
-                        "trial_ends_at":  str(trial_ends),
-                        "dias_restantes": dias_rest,
-                        "data_inicio":    str(ass["data_inicio"]) if ass.get("data_inicio") else None,
-                        "recursos":       recursos,
-                    }
+                    "tem_assinatura": False,
+                    "trial_expirado": True,
+                    "mensagem":       "Seu período gratuito encerrou. Assine um plano para continuar."
                 }, 200
 
-            return {"success": True, "tem_assinatura": False}, 200
+            plano, recursos = self._plano_recursos(ass["id_plano"])
+            pendente        = self._pendente_asaas(id_usuario)
 
-        ass = assinatura[0]
-
-        modPlano   = PlanoModel()
-        plano_data = modPlano.find_one(ass["id_plano"])
-        plano      = plano_data[0] if plano_data else {}
-
-        recursos = []
-        if plano.get("recursos"):
-            try:
-                recursos = json.loads(plano["recursos"])
-            except:
-                recursos = []
-
-        return {
-            "success": True,
-            "tem_assinatura": True,
-            "assinatura": {
-                "id":                    ass["id_assinatura"],
-                "id_plano":              ass["id_plano"],
-                "plano_nome":            plano.get("nome", ""),
-                "plano_tipo":            plano.get("tipo", 0),
-                "status":                ass["status"],
-                "trial":                 False,
-                "data_inicio":           str(ass["data_inicio"]) if ass.get("data_inicio") else None,
-                "data_proxima_cobranca": str(ass["data_proxima_cobranca"]) if ass.get("data_proxima_cobranca") else None,
-                "recursos":              recursos,
+            resp = {
+                "success":        True,
+                "tem_assinatura": True,
+                "assinatura": {
+                    "id":             ass["id_assinatura"],
+                    "id_plano":       ass["id_plano"],
+                    "plano_nome":     plano.get("nome", ""),
+                    "plano_tipo":     plano.get("tipo", 0),
+                    "status":         "trial",
+                    "trial":          True,
+                    "trial_ends_at":  str(trial_ends),
+                    "dias_restantes": dias_rest,
+                    "data_inicio":    str(ass["data_inicio"]) if ass.get("data_inicio") else None,
+                    "recursos":       recursos,
+                }
             }
-        }, 200
+            if pendente:
+                resp["pendente"] = pendente
+            return resp, 200
+
+        # 3º pendente Asaas sem assinatura ativa
+        pendente = self._pendente_asaas(id_usuario)
+        if pendente:
+            return {
+                "success":        True,
+                "tem_assinatura": False,
+                "pendente":       pendente
+            }, 200
+
+        return {"success": True, "tem_assinatura": False}, 200
 
     def cancelar(self, id_usuario):
         modAssinatura = AssinaturaModel()

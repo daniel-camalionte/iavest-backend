@@ -1,5 +1,6 @@
 from model.Estrategia import EstrategiaModel
 from model.Assinatura import AssinaturaModel
+from datetime import datetime
 
 class RobosRule():
 
@@ -8,7 +9,17 @@ class RobosRule():
 
     def listar(self, id_usuario):
         modAssinatura = AssinaturaModel()
-        assinatura = modAssinatura.where(['id_usuario', '=', id_usuario]).where(['status', '=', 'active']).find()
+
+        # 1º prioridade: assinatura paga ativa
+        assinatura = modAssinatura.where(['id_usuario', '=', id_usuario]) \
+                                  .where(['status', '=', 'active']).find()
+
+        # 2º trial vigente
+        if not assinatura:
+            trial = modAssinatura.where(['id_usuario', '=', id_usuario]) \
+                                 .where(['status', '=', 'trial']).find()
+            if trial and trial[0].get("trial_ends_at") and trial[0]["trial_ends_at"] > datetime.now():
+                assinatura = trial
 
         if not assinatura:
             return {"success": False, "message": "Nenhum robô disponível. Verifique sua assinatura."}, 404
