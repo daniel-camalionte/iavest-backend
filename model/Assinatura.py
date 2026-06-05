@@ -27,6 +27,7 @@ class AssinaturaModel(BaseModel):
                     "data_inicio": 'data_inicio',
                     "data_fim": 'data_fim',
                     "data_proxima_cobranca": 'data_proxima_cobranca',
+                    "trial_ends_at": 'trial_ends_at',
                     "created_at": 'created_at',
                     "updated_at": 'updated_at'
                 }

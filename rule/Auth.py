@@ -4,6 +4,7 @@ from library.SMTP import SMTP
 from library.Funcao import Funcao
 from datetime import datetime, timedelta, timezone
 from flask_jwt_extended import create_access_token
+from rule.Assinatura import AssinaturaRule
 
 class AuthRule():
 
@@ -186,6 +187,12 @@ class AuthRule():
             "email": email_token
         }
         token = create_access_token(identity=token_data)
+
+        # Trial gratuito — estrutura isolada, falha silenciosa
+        try:
+            AssinaturaRule().criar_trial(id_usuario)
+        except Exception:
+            pass
 
         return {
             "success": True,

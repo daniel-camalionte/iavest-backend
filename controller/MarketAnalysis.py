@@ -1,7 +1,8 @@
 from flask import request
 from flask.views import MethodView
+from flask_jwt_extended import jwt_required
 
-from rule.MarketAnalysis import MarketAnalysisRule
+from rule.MarketAnalysis import MarketAnalysisRule, MarketAnalysisListRule, MarketAnalysisDetailRule
 from library.TwelveDataClient import TwelveDataClient
 from library.YahooFinanceClient import YahooFinanceClient
 from library.HttpClient import HttpClient
@@ -118,3 +119,37 @@ class MarketDebugController(MethodView):
             "twelve_data_macro":     td.debug_raw(),
             "yahoo_ibov_technical":  yf.get_ibov_technical(),
         }, 200
+
+
+class MarketAnalysisListController(MethodView):
+    """GET /market/analysis — listagem das últimas análises (limit 10)"""
+
+    @jwt_required
+    def get(self):
+        date_filter = request.args.get("date")
+
+        try:
+            id_ativos_base = int(request.args.get("id_ativos_base", 0)) or None
+        except (TypeError, ValueError):
+            id_ativos_base = None
+
+        return MarketAnalysisListRule.list(
+            date_filter=date_filter,
+            id_ativos_base=id_ativos_base,
+        )
+
+
+class MarketAnalysisDetailController(MethodView):
+    """GET /market/analysis/<id> — detalhe completo; sem id retorna último registro"""
+
+    @jwt_required
+    def get(self, id_market_analysis=None):
+        try:
+            id_ativos_base = int(request.args.get("id_ativos_base", 0)) or None
+        except (TypeError, ValueError):
+            id_ativos_base = None
+
+        return MarketAnalysisDetailRule.detail(
+            id_market_analysis=id_market_analysis,
+            id_ativos_base=id_ativos_base,
+        )

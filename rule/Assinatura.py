@@ -3,12 +3,48 @@ from model.Plano import PlanoModel
 from library.HttpClient import HttpClient
 import config.env as memory
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 class AssinaturaRule():
 
     def __init__(self):
         pass
+
+    # -------------------------------------------------------------------------
+    # Trial gratuito — estrutura isolada
+    # -------------------------------------------------------------------------
+    def criar_trial(self, id_usuario):
+        modAssinatura = AssinaturaModel()
+
+        # Não cria se já existe trial ou assinatura ativa
+        existente = modAssinatura.where(['id_usuario', '=', id_usuario]) \
+                                 .where(['status', 'IN', ['active', 'trial']]) \
+                                 .find()
+        if existente:
+            return
+
+        modPlano = PlanoModel()
+        plano_trial = modPlano.where(['tipo', '=', 1]).where(['ativo', '=', 1]).find()
+        if not plano_trial:
+            return
+
+        agora        = datetime.now()
+        trial_ends   = agora + timedelta(days=memory.trial["DAYS"])
+
+        modAssinatura.save({
+            "id_usuario":    id_usuario,
+            "id_plano":      plano_trial[0]["id_plano"],
+            "status":        "trial",
+            "data_inicio":   agora.strftime('%Y-%m-%d %H:%M:%S'),
+            "trial_ends_at": trial_ends.strftime('%Y-%m-%d %H:%M:%S'),
+        })
+
+    def _cancelar_trial_ativo(self, id_usuario):
+        modAssinatura = AssinaturaModel()
+        trial = modAssinatura.where(['id_usuario', '=', id_usuario]) \
+                             .where(['status', '=', 'trial']).find()
+        if trial:
+            modAssinatura.update({"status": "cancelled"}, trial[0]["id_assinatura"])
 
     def criar(self, id_usuario, data):
         plano_id = data.get("plano_id")
@@ -76,10 +112,16 @@ class AssinaturaRule():
 
     def status(self, id_usuario):
         modAssinatura = AssinaturaModel()
-        assinatura = modAssinatura.where(['id_usuario', '=', id_usuario]).where(['status', '=', 'active']).find()
+
+        # 1º prioridade: assinatura paga ativa
+        assinatura = modAssinatura.where(['id_usuario', '=', id_usuario]) \
+                                  .where(['status', '=', 'active']).find()
 
         if not assinatura:
-            pendente = modAssinatura.where(['id_usuario', '=', id_usuario]).where(['status', '=', 'pending']).where(['gateway', '=', 'asaas']).find()
+            # 2º verificar pendente Asaas
+            pendente = modAssinatura.where(['id_usuario', '=', id_usuario]) \
+                                    .where(['status', '=', 'pending']) \
+                                    .where(['gateway', '=', 'asaas']).find()
             if pendente:
                 return {
                     "success": True,
@@ -89,13 +131,59 @@ class AssinaturaRule():
                         "invoice_url": pendente[0].get("checkout_url", "")
                     }
                 }, 200
+
+            # 3º verificar trial
+            trial = modAssinatura.where(['id_usuario', '=', id_usuario]) \
+                                  .where(['status', '=', 'trial']).find()
+            if trial:
+                ass = trial[0]
+                trial_ends = ass.get("trial_ends_at")
+                agora      = datetime.now()
+                ativo      = trial_ends and trial_ends > agora
+                dias_rest  = (trial_ends - agora).days if ativo else 0
+
+                if not ativo:
+                    return {
+                        "success":        True,
+                        "tem_assinatura": False,
+                        "trial_expirado": True,
+                        "mensagem":       "Seu período gratuito encerrou. Assine um plano para continuar."
+                    }, 200
+
+                modPlano  = PlanoModel()
+                plano_data = modPlano.find_one(ass["id_plano"])
+                plano      = plano_data[0] if plano_data else {}
+                recursos   = []
+                if plano.get("recursos"):
+                    try:
+                        recursos = json.loads(plano["recursos"])
+                    except:
+                        recursos = []
+
+                return {
+                    "success":        True,
+                    "tem_assinatura": True,
+                    "assinatura": {
+                        "id":             ass["id_assinatura"],
+                        "id_plano":       ass["id_plano"],
+                        "plano_nome":     plano.get("nome", ""),
+                        "plano_tipo":     plano.get("tipo", 0),
+                        "status":         "trial",
+                        "trial":          True,
+                        "trial_ends_at":  str(trial_ends),
+                        "dias_restantes": dias_rest,
+                        "data_inicio":    str(ass["data_inicio"]) if ass.get("data_inicio") else None,
+                        "recursos":       recursos,
+                    }
+                }, 200
+
             return {"success": True, "tem_assinatura": False}, 200
 
         ass = assinatura[0]
 
-        modPlano = PlanoModel()
+        modPlano   = PlanoModel()
         plano_data = modPlano.find_one(ass["id_plano"])
-        plano = plano_data[0] if plano_data else {}
+        plano      = plano_data[0] if plano_data else {}
 
         recursos = []
         if plano.get("recursos"):
@@ -108,13 +196,15 @@ class AssinaturaRule():
             "success": True,
             "tem_assinatura": True,
             "assinatura": {
-                "id": ass["id_assinatura"],
-                "id_plano": ass["id_plano"],
-                "plano_nome": plano.get("nome", ""),
-                "status": ass["status"],
-                "data_inicio": str(ass["data_inicio"]) if ass.get("data_inicio") else None,
+                "id":                    ass["id_assinatura"],
+                "id_plano":              ass["id_plano"],
+                "plano_nome":            plano.get("nome", ""),
+                "plano_tipo":            plano.get("tipo", 0),
+                "status":                ass["status"],
+                "trial":                 False,
+                "data_inicio":           str(ass["data_inicio"]) if ass.get("data_inicio") else None,
                 "data_proxima_cobranca": str(ass["data_proxima_cobranca"]) if ass.get("data_proxima_cobranca") else None,
-                "recursos": recursos
+                "recursos":              recursos,
             }
         }, 200
 

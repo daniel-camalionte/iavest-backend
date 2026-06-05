@@ -23,13 +23,14 @@ class PlanoRule():
                     recursos = []
 
             lista.append({
-                "id": plano["id_plano"],
-                "nome": plano["nome"],
-                "descricao": plano["descricao"],
+                "id":          plano["id_plano"],
+                "nome":        plano["nome"],
+                "descricao":   plano["descricao"],
                 "preco_mensal": float(plano["valor_original"]),
-                "recursos": recursos,
-                "destaque": bool(plano["destaque"]),
-                "esgotado": bool(plano["esgotado"])
+                "recursos":    recursos,
+                "destaque":    bool(plano["destaque"]),
+                "esgotado":    bool(plano["esgotado"]),
+                "tipo":        plano.get("tipo", 0),
             })
 
         return {"success": True, "planos": lista}, 200

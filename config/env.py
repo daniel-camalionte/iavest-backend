@@ -101,6 +101,11 @@ market = {
     "CACHE_TTL": int(os.environ.get("MARKET_CACHE_TTL", 86400))
 }
 
+# TRIAL
+trial = {
+    "DAYS": int(os.environ.get("TRIAL_DAYS", 10))
+}
+
 # TICKET / SUPORTE
 ticket = {
     "SUPPORT_EMAILS": os.environ.get("TICKET_SUPPORT_EMAILS", "dcamalionte@gmail.com")

@@ -52,7 +52,11 @@ class MetatraderLoginRule():
         sql_plano = """SELECT p.contrato
                        FROM assinatura a
                        INNER JOIN plano p ON p.id_plano = a.id_plano
-                       WHERE a.id_usuario = %s AND a.status = 'active'
+                       WHERE a.id_usuario = %s
+                         AND (
+                           a.status = 'active'
+                           OR (a.status = 'trial' AND (a.trial_ends_at IS NULL OR a.trial_ends_at > NOW()))
+                         )
                        LIMIT 1"""
 
         ret_plano = modGenerico.fetch(sql_plano, [conta.get("id_usuario")])

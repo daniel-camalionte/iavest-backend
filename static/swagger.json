@@ -133,6 +133,111 @@
         }
       }
     },
+    "/market/analysis": {
+      "get": {
+        "tags": ["Market Analysis"],
+        "summary": "Listar análises de mercado",
+        "description": "Retorna as últimas 10 análises ordenadas por data decrescente. Filtro opcional por data exata.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "Filtro por data exata (YYYY-MM-DD)",
+            "example": "2026-05-05"
+          },
+          {
+            "name": "id_ativos_base",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "description": "Filtro por ativo (1 = WIN)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista retornada com sucesso",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "array",
+                  "items": { "$ref": "#/definitions/MarketAnalysisGridItem" }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token inválido ou ausente" }
+        }
+      }
+    },
+    "/market/analysis/latest": {
+      "get": {
+        "tags": ["Market Analysis"],
+        "summary": "Detalhe da última análise",
+        "description": "Retorna o registro mais recente com todos os campos. Filtro opcional por ativo via id_ativos_base.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "name": "id_ativos_base",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "description": "Filtro por ativo (1 = WIN). Sem filtro retorna o último registro geral."
+          }
+        ],
+        "responses": {
+          "200": { "description": "Análise retornada" },
+          "404": { "description": "Nenhuma análise disponível" },
+          "401": { "description": "Token inválido ou ausente" }
+        }
+      }
+    },
+    "/market/analysis/{id}": {
+      "get": {
+        "tags": ["Market Analysis"],
+        "summary": "Detalhe de análise por ID",
+        "description": "Retorna todos os campos de uma análise específica.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer",
+            "description": "ID da análise (id_market_analysis)"
+          }
+        ],
+        "responses": {
+          "200": { "description": "Análise retornada" },
+          "404": { "description": "Análise não encontrada" },
+          "401": { "description": "Token inválido ou ausente" }
+        }
+      }
+    },
     "/market/ping": {
       "get": {
         "tags": ["Market Analysis"],
@@ -1713,6 +1818,36 @@
     }
   },
   "definitions": {
+    "MarketAnalysisGridItem": {
+      "type": "object",
+      "properties": {
+        "id_market_analysis": { "type": "integer", "example": 1 },
+        "analyzed_at":        { "type": "string",  "example": "2026-05-05 09:30:00" },
+        "id_ativos_base":     { "type": "integer", "example": 1 },
+        "recommendation":     { "type": "string",  "example": "COMPRA" },
+        "confidence":         { "type": "string",  "example": "ALTA" },
+        "contracts":          { "type": "integer", "example": 2 },
+        "score": {
+          "type": "object",
+          "properties": {
+            "total":     { "type": "integer", "example": 72 },
+            "technical": { "type": "integer", "example": 68 },
+            "macro":     { "type": "integer", "example": 61 }
+          }
+        },
+        "td_price": { "type": "number", "example": 125480.00 },
+        "chart_marker": {
+          "type": "object",
+          "properties": {
+            "time":     { "type": "string",  "example": "2026-05-05" },
+            "position": { "type": "string",  "example": "belowBar" },
+            "color":    { "type": "string",  "example": "#26a69a" },
+            "shape":    { "type": "string",  "example": "arrowUp" },
+            "text":     { "type": "string",  "example": "COMPRA ALTA" }
+          }
+        }
+      }
+    },
     "TermoAceiteRequest": {
       "type": "object",
       "required": ["tipo_aceite", "termo_versao"],

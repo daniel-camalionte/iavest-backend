@@ -285,7 +285,8 @@ def _call_claude(macro: dict, technical: dict, system_prompt: str):
     )
 
     if not resp or resp["status_code"] not in (200, 201):
-        return None
+        _err = resp["data"] if resp else "sem resposta"
+        raise RuntimeError(f"Claude API {resp['status_code'] if resp else 'timeout'}: {_err}")
 
     raw_text = resp["data"]["content"][0]["text"].strip()
 
@@ -297,7 +298,7 @@ def _call_claude(macro: dict, technical: dict, system_prompt: str):
     try:
         return json.loads(raw_text)
     except json.JSONDecodeError:
-        return None
+        raise RuntimeError(f"Claude retornou JSON inválido: {raw_text[:300]}")
 
 
 # ---------------------------------------------------------------------------
@@ -351,9 +352,10 @@ class BaseMarketAnalyzer(ABC):
         vix_lv                 = _vix_level(vix_price)
         macro["vxx"]["vix_level"] = vix_lv
 
-        claude_result = _call_claude(macro, technical, self._get_system_prompt())
-        if not claude_result:
-            return {"error": "Falha ao processar análise com Claude"}, 500
+        try:
+            claude_result = _call_claude(macro, technical, self._get_system_prompt())
+        except RuntimeError as e:
+            return {"error": "Falha ao processar análise com Claude", "detail": str(e)}, 500
 
         score_total = claude_result.get("score_total", 50)
         contracts   = _calculate_contracts(score_total, max_contracts, vix_lv)
@@ -563,3 +565,211 @@ class MarketAnalysisRule:
     def get(id_ativos_base: int):
         cls = _ANALYZERS.get(id_ativos_base)
         return cls() if cls else None
+
+
+# ---------------------------------------------------------------------------
+# Helpers de listagem / detalhe
+# ---------------------------------------------------------------------------
+
+_TRADE_ACCOUNT   = '1001442906'
+_ativo_base_cache = {}
+
+
+def _build_ativo_base(id_ativos_base, nome_only=False):
+    from library.MySql import MySql
+    from decimal import Decimal
+
+    if id_ativos_base not in _ativo_base_cache:
+        rows = MySql().fetch(
+            "SELECT id_ativos_base, ticker_base, nome, tipo_mercado, tick_size, vencimento_periodicidade "
+            "FROM ativos_base WHERE id_ativos_base = %s",
+            (id_ativos_base,)
+        )
+        if not rows:
+            _ativo_base_cache[id_ativos_base] = None
+        else:
+            r = rows[0]
+            _ativo_base_cache[id_ativos_base] = {
+                "id_ativos_base":          r["id_ativos_base"],
+                "ticker_base":             r["ticker_base"],
+                "nome":                    r["nome"],
+                "tipo_mercado":            r["tipo_mercado"],
+                "tick_size":               float(r["tick_size"]) if isinstance(r["tick_size"], Decimal) else r["tick_size"],
+                "vencimento_periodicidade": r["vencimento_periodicidade"],
+            }
+
+    data = _ativo_base_cache.get(id_ativos_base)
+    if data and nome_only:
+        return {"nome": data["nome"]}
+    return data
+
+_ALIGN_MAP = {
+    'COMPRA': 'buy',
+    'VENDA':  'sell',
+}
+
+
+def _build_robos(analyzed_at: str, recommendation: str) -> dict:
+    from library.MySql import MySql
+    date_ref = str(analyzed_at)[:10]
+
+    sql = """
+        SELECT
+            t.id_estrategia,
+            e.nome,
+            t.type,
+            COUNT(*)                                                      AS total,
+            SUM(CASE WHEN t.operation = 'profit' THEN 1 ELSE 0 END)      AS profit,
+            SUM(CASE WHEN t.operation = 'loss'   THEN 1 ELSE 0 END)      AS loss
+        FROM trade t
+        INNER JOIN estrategia e ON e.id_estrategia = t.id_estrategia
+        WHERE t.account_number = %s
+          AND t.status         = 'closed'
+          AND DATE(t.closed_at) = %s
+        GROUP BY t.id_estrategia, e.nome, t.type
+    """
+
+    rows = MySql().fetch(sql, (_TRADE_ACCOUNT, date_ref)) or []
+
+    if not rows:
+        return {"operaram": False, "indice_acerto_geral": None, "alinhamento": None, "resumo": []}
+
+    tipo_alinhado = _ALIGN_MAP.get((recommendation or '').upper())
+    total_geral  = sum(int(r['total']  or 0) for r in rows)
+    profit_geral = sum(int(r['profit'] or 0) for r in rows)
+
+    resumo = []
+    for r in rows:
+        total  = int(r['total']  or 0)
+        profit = int(r['profit'] or 0)
+        loss   = int(r['loss']   or 0)
+        acerto_pct = round(profit / total * 100, 1) if total else 0
+        resumo.append({
+            "id_estrategia": r['id_estrategia'],
+            "nome":          r['nome'],
+            "type":          r['type'],
+            "total":         total,
+            "profit":        profit,
+            "loss":          loss,
+            "acerto_pct":    acerto_pct,
+        })
+
+    alinhamento = {
+        "analise":     (recommendation or '').upper(),
+        "tipo_esperado": tipo_alinhado,
+        "robos": [
+            {"nome": r["nome"], "type": r["type"], "alinhado": r["type"] == tipo_alinhado}
+            for r in resumo
+        ],
+    } if tipo_alinhado else None
+
+    return {
+        "operaram":            True,
+        "indice_acerto_geral": round(profit_geral / total_geral * 100, 1) if total_geral else None,
+        "alinhamento":         alinhamento,
+        "resumo":              resumo,
+    }
+
+
+def _serialize(row: dict) -> dict:
+    from decimal import Decimal
+    from datetime import datetime, date
+    result = {}
+    for k, v in row.items():
+        if isinstance(v, Decimal):
+            result[k] = float(v)
+        elif isinstance(v, (datetime, date)):
+            result[k] = str(v)
+        else:
+            result[k] = v
+    return result
+
+
+_CHART_MAP = {
+    "COMPRA":     {"position": "belowBar", "color": "#26a69a", "shape": "arrowUp"},
+    "VENDA":      {"position": "aboveBar", "color": "#ef5350", "shape": "arrowDown"},
+    "INDEFINIÇÃO": {"position": "belowBar", "color": "#FF9800", "shape": "circle"},
+}
+
+
+def _build_chart_marker(row: dict) -> dict:
+    rec   = (row.get("recommendation") or "").upper()
+    style = _CHART_MAP.get(rec, _CHART_MAP["INDEFINIÇÃO"])
+    conf  = row.get("confidence") or ""
+    return {
+        "time":     str(row["analyzed_at"])[:10],
+        "position": style["position"],
+        "color":    style["color"],
+        "shape":    style["shape"],
+        "text":     f"{rec} {conf}".strip(),
+    }
+
+
+def _row_to_grid(row: dict) -> dict:
+    row = _serialize(row)
+    return {
+        "id_market_analysis": row.get("id_market_analysis"),
+        "analyzed_at":        row.get("analyzed_at"),
+        "id_ativos_base":     row.get("id_ativos_base"),
+        "ativo_base":         _build_ativo_base(row.get("id_ativos_base"), nome_only=True),
+        "recommendation":     row.get("recommendation"),
+        "confidence":         row.get("confidence"),
+        "contracts":          row.get("contracts"),
+        "score": {
+            "total":     row.get("score_total"),
+            "technical": row.get("score_technical"),
+            "macro":     row.get("score_macro"),
+        },
+        "td_price":     row.get("td_price"),
+        "chart_marker": _build_chart_marker(row),
+    }
+
+
+class MarketAnalysisListRule:
+
+    @staticmethod
+    def list(date_filter: str = None, id_ativos_base: int = None):
+        model = MarketAnalysisModel()
+
+        model.order("analyzed_at", "DESC").limit(10)
+
+        if date_filter:
+            model.where(["DATE(analyzed_at)", "=", date_filter])
+
+        if id_ativos_base:
+            model.where(["id_ativos_base", "=", id_ativos_base])
+
+        rows = model.find() or []
+        return {"data": [_row_to_grid(r) for r in rows]}, 200
+
+
+class MarketAnalysisDetailRule:
+
+    @staticmethod
+    def detail(id_market_analysis: int = None, id_ativos_base: int = None):
+        model = MarketAnalysisModel()
+
+        if id_market_analysis:
+            rows = model.find_one(id_market_analysis)
+            if not rows:
+                return {"error": "Análise não encontrada"}, 404
+            row = rows[0]
+        else:
+            if id_ativos_base:
+                model.where(["id_ativos_base", "=", id_ativos_base])
+            rows = model.order("analyzed_at", "DESC").limit(1).find()
+            if not rows:
+                return {"error": "Nenhuma análise disponível"}, 404
+            row = rows[0]
+
+        row = _serialize(row)
+        row.pop("payload_json", None)
+        row["ativo_base"]   = _build_ativo_base(row.get("id_ativos_base"))
+        row["chart_marker"] = _build_chart_marker(row)
+
+        try:
+            row["robos"] = _build_robos(row.get("analyzed_at"), row.get("recommendation"))
+        except Exception:
+            row["robos"] = None
+
+        return row, 200

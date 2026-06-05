@@ -136,6 +136,8 @@ api.add_resource(appController.MarketAnalysisPingController, '/market/ping')
 api.add_resource(appController.MarketAnalyzeController, '/market/analyze')
 api.add_resource(appController.MarketCacheClearController, '/market/cache')
 api.add_resource(appController.MarketDebugController, '/market/debug')
+api.add_resource(appController.MarketAnalysisListController, '/market/analysis')
+api.add_resource(appController.MarketAnalysisDetailController, '/market/analysis/<int:id_market_analysis>', '/market/analysis/latest')
 
 #touch ~/apps_wsgi/stg.wsgi
 

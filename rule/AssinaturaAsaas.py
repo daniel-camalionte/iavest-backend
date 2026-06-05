@@ -4,6 +4,7 @@ from model.Usuario import UsuarioModel
 from library.HttpClient import HttpClient
 import config.env as memory
 from datetime import datetime, timedelta
+from rule.Assinatura import AssinaturaRule
 
 class AssinaturaAsaasRule():
 
@@ -85,6 +86,9 @@ class AssinaturaAsaasRule():
         }
 
         modAssinatura.save(obj)
+
+        # Cancela trial ativo se existir — pago tem prioridade
+        AssinaturaRule()._cancelar_trial_ativo(id_usuario)
 
         return {"success": True, "invoice_url": invoice_url}, 201
 

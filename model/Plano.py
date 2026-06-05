@@ -28,6 +28,7 @@ class PlanoModel(BaseModel):
                     "esgotado": 'esgotado',
                     "ordem": 'ordem',
                     "ativo": 'ativo',
+                    "tipo": 'tipo',
                     "created_at": 'created_at',
                     "updated_at": 'updated_at'
                 }
