@@ -107,6 +107,19 @@ PREÇO DE ATIVAÇÃO:
 - O objetivo é evitar entrada na abertura e aguardar confirmação de rompimento após os primeiros 30 minutos de pregão.
 - No campo "description", explique qual nível foi escolhido e por quê.
 
+CENÁRIOS DAYTRADE (OBRIGATÓRIO):
+Com base nos níveis técnicos disponíveis (prev_low, prev_high, SMA9, SMA21, SMA50, Bollinger Bands), defina 3 cenários operacionais para o dia:
+- "alta": mercado rompe para cima — entrada acima do buy_trigger, stop abaixo do suporte mais próximo (SMA9 ou prev_low), alvo_1 na Bollinger superior ou SMA50, alvo_2 na resistência seguinte se houver espaço
+- "baixa": mercado rompe para baixo — entrada abaixo do sell_trigger, stop acima da resistência mais próxima (SMA9 ou prev_high), alvo_1 na Bollinger inferior ou SMA50 abaixo, alvo_2 no próximo suporte relevante
+- "reversao": mercado cai, toca suporte e reverte — entrada no rompimento de volta acima do pivot de mínima, stop abaixo do suporte testado, alvo_1 na região de entrada original
+
+Regras para os cenários daytrade:
+- Stop loss SEMPRE baseado em níveis técnicos reais (Bollinger, SMA, prev_high/low), nunca percentuais fixos
+- Risco:retorno mínimo 1:1.5 para forca FORTE, 1:1 para forca MEDIA
+- "forca": FORTE se o cenário está alinhado com a recommendation principal, FRACA se é contrário, MEDIA se é neutro
+- Incluir os 3 cenários sempre, mesmo que um deles tenha forca FRACA
+- "condicao": frase objetiva descrevendo quando o operador deve entrar (ex: "Se romper acima de 127500 com volume após 10h00")
+
 RECOMENDAÇÃO:
 - Score ≥ 60: COMPRA      → usar IAs de compra (Sirius Trader, Yang Trader)
 - Score ≤ 40: VENDA       → usar IAs de venda (Selene Trader, Ying Trader)
@@ -171,6 +184,11 @@ Formato obrigatório:
     "description": "<string explicando o nível e por que foi escolhido>"
   },
   "blind_spots": ["<string descrevendo cada ponto cego identificado>"],
+  "daytrade_scenarios": {
+    "alta":     {"condicao": "<string>", "entrada": <float>, "stop_loss": <float>, "alvo_1": <float>, "alvo_2": <float|null>, "risco_retorno": "<string>", "forca": "<FORTE|MEDIA|FRACA>"},
+    "baixa":    {"condicao": "<string>", "entrada": <float>, "stop_loss": <float>, "alvo_1": <float>, "alvo_2": <float|null>, "risco_retorno": "<string>", "forca": "<FORTE|MEDIA|FRACA>"},
+    "reversao": {"condicao": "<string>", "entrada": <float>, "stop_loss": <float>, "alvo_1": <float>, "alvo_2": <float|null>, "risco_retorno": "<string>", "forca": "<FORTE|MEDIA|FRACA>"}
+  },
   "narrative": "<string com análise fundamentalista em português, 3–5 parágrafos>"
 }"""
 
@@ -378,9 +396,10 @@ class BaseMarketAnalyzer(ABC):
             "market_context":    claude_result.get("market_context"),
             "macro_context":     macro,
             "macro_signals":     claude_result.get("macro_signals"),
-            "activation_price":  claude_result.get("activation_price"),
-            "blind_spots":       claude_result.get("blind_spots"),
-            "narrative":         claude_result.get("narrative"),
+            "activation_price":    claude_result.get("activation_price"),
+            "blind_spots":         claude_result.get("blind_spots"),
+            "daytrade_scenarios":  claude_result.get("daytrade_scenarios"),
+            "narrative":           claude_result.get("narrative"),
             "cached":            False,
             "cache_ttl_minutes": ttl // 60,
             "cache_expires_at":  datetime.fromtimestamp(now + ttl, tz=BRASILIA).strftime("%Y-%m-%dT%H:%M:%S"),
@@ -505,6 +524,7 @@ class BaseMarketAnalyzer(ABC):
                 "mc_vale_pct":         _mc("vale",   "percent_change"),
 
                 "blind_spots":         json.dumps(claude_result.get("blind_spots") or []),
+                "daytrade_scenarios":  json.dumps(claude_result.get("daytrade_scenarios") or {}),
                 "narrative":           claude_result.get("narrative", ""),
                 "payload_json":        json.dumps(payload),
             }
@@ -764,6 +784,15 @@ class MarketAnalysisDetailRule:
 
         row = _serialize(row)
         row.pop("payload_json", None)
+
+        for _json_col in ("blind_spots", "daytrade_scenarios"):
+            val = row.get(_json_col)
+            if val and isinstance(val, str):
+                try:
+                    row[_json_col] = json.loads(val)
+                except Exception:
+                    pass
+
         row["ativo_base"]   = _build_ativo_base(row.get("id_ativos_base"))
         row["chart_marker"] = _build_chart_marker(row)
 

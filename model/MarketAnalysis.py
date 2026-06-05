@@ -112,6 +112,7 @@ class MarketAnalysisModel(BaseModel):
             "mc_vale_pct":         "mc_vale_pct",
 
             "blind_spots":         "blind_spots",
+            "daytrade_scenarios":  "daytrade_scenarios",
             "narrative":           "narrative",
             "payload_json":        "payload_json",
 
