@@ -20,4 +20,5 @@ from controller.Usuario import UsuarioController
 from controller.Chat import ChatController
 from controller.MarketAnalysis import MarketAnalysisPingController, MarketAnalyzeController, MarketCacheClearController, MarketDebugController, MarketAnalysisListController, MarketAnalysisDetailController
 from controller.TermoAceite import TermoAceiteController
+from controller.TradePerformance import TradePerformanceMensalController, TradePerformanceCacheClearController
 

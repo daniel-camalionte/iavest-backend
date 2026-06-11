@@ -70,6 +70,8 @@ class MetatraderLoginRule():
         modMetatraderConfigsLog = MetatraderConfigsLogModel()
         modMetatraderConfigsLog.save({
             "id_metatrader_configs": conta.get("id_metatrader_configs"),
+            "id_estrategia": id_estrategia,
+            "robo_versao": data.get("versao"),
             "connection_status": 'connected',
             "ip": ip
         })

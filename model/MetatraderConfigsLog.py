@@ -16,6 +16,8 @@ class MetatraderConfigsLogModel(BaseModel):
         fields = {
                     "id_metatrader_configs_log": 'id_metatrader_configs_log',
                     "id_metatrader_configs": 'id_metatrader_configs',
+                    "id_estrategia": 'id_estrategia',
+                    "robo_versao": 'robo_versao',
                     "connection_status": 'connection_status',
                     "ip": 'ip',
                     "created_at": 'created_at'

@@ -86,6 +86,10 @@
     {
       "name": "Termo Aceite",
       "description": "Registro de aceite de termos pelo usuário"
+    },
+    {
+      "name": "Performance",
+      "description": "Resultados históricos das IAs de trading — rota pública para landing page"
     }
   ],
   "schemes": [
@@ -1795,6 +1799,76 @@
         }
       }
     },
+    "/performance/cache": {
+      "delete": {
+        "tags": ["Performance"],
+        "summary": "Limpar cache de performance",
+        "description": "Remove o cache em memória dos resultados mensais. A próxima requisição ao /performance/mensal buscará os dados diretamente do banco.",
+        "produces": ["application/json"],
+        "responses": {
+          "200": {
+            "description": "Cache limpo com sucesso",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": true },
+                "message": { "type": "string",  "example": "Cache limpo com sucesso" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/performance/mensal": {
+      "get": {
+        "tags": ["Performance"],
+        "summary": "Resultados mensais das IAs (Selene e Sirius)",
+        "description": "Retorna o desempenho mensal das IAs de trading (Selene id=3, Sirius id=4) da conta real 1001457239, com ganho ajustado por contratos, percentual de evolução, capital acumulado e cards de resumo. Rota pública — sem autenticação.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "contracts",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 1,
+            "description": "Simulação de N contratos. O ganho é calculado como (profit_loss / contract) × contracts."
+          },
+          {
+            "name": "capital",
+            "in": "query",
+            "required": false,
+            "type": "number",
+            "default": 2000,
+            "description": "Capital base em R$ para cálculo do percentual mensal. Calculado automaticamente como contracts × 1000. Ex: 2 contratos = R$ 2.000."
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "default": "2026-01-01",
+            "description": "Data inicial do filtro (YYYY-MM-DD). Default: 2026-01-01.",
+            "example": "2026-01-01"
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "Data final do filtro (YYYY-MM-DD). Default: data de hoje.",
+            "example": "2026-06-08"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultados retornados com sucesso",
+            "schema": { "$ref": "#/definitions/PerformanceMensalResponse" }
+          },
+          "500": { "description": "Internal Server Error" }
+        }
+      }
+    },
     "/webhook/asaas": {
       "post": {
         "tags": ["Asaas"],
@@ -3110,6 +3184,73 @@
           "type": "string",
           "example": "2026-02-25T10:05:00Z"
         }
+      }
+    },
+    "PerformanceMensalResponse": {
+      "type": "object",
+      "properties": {
+        "success":   { "type": "boolean", "example": true },
+        "contracts": { "type": "integer", "example": 2 },
+        "capital":   { "type": "number",  "example": 2000 },
+        "date_from": { "type": "string",  "example": "2026-01-01" },
+        "date_to":   { "type": "string",  "example": "2026-06-08" },
+        "cached":    { "type": "boolean", "example": true },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "total_operacoes":     { "type": "integer", "example": 450 },
+            "acerto_geral_pct":    { "type": "number",  "example": 62.3 },
+            "capital_acumulado":   { "type": "number",  "example": 15420.00 },
+            "drawdown_maximo_pct": { "type": "number",  "example": -3.2 },
+            "melhor_mes": {
+              "type": "object",
+              "properties": {
+                "mes":   { "type": "string", "example": "Mar/25" },
+                "ganho": { "type": "number", "example": 2100.00 },
+                "pct":   { "type": "number", "example": 10.5 }
+              }
+            },
+            "pior_mes": {
+              "type": "object",
+              "properties": {
+                "mes":   { "type": "string", "example": "Jan/25" },
+                "ganho": { "type": "number", "example": -400.00 },
+                "pct":   { "type": "number", "example": -2.0 }
+              }
+            }
+          }
+        },
+        "mensal": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/PerformanceMesItem" }
+        }
+      }
+    },
+    "PerformanceMesItem": {
+      "type": "object",
+      "properties": {
+        "mes":       { "type": "string", "example": "2025-01" },
+        "mes_label": { "type": "string", "example": "Jan/25" },
+        "selene": { "$ref": "#/definitions/PerformanceIaItem" },
+        "sirius":  { "$ref": "#/definitions/PerformanceIaItem" },
+        "total": {
+          "type": "object",
+          "properties": {
+            "ganho":             { "type": "number", "example": 1400.00 },
+            "pct":               { "type": "number", "example": 7.0 },
+            "capital_acumulado": { "type": "number", "example": 1400.00 }
+          }
+        }
+      }
+    },
+    "PerformanceIaItem": {
+      "type": "object",
+      "nullable": true,
+      "properties": {
+        "ganho":      { "type": "number",  "example": 840.00 },
+        "pct":        { "type": "number",  "example": 4.2 },
+        "operacoes":  { "type": "integer", "example": 45 },
+        "acerto_pct": { "type": "number",  "example": 65.0 }
       }
     },
     "TicketsListResponse": {
