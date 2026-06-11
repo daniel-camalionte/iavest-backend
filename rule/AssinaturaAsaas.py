@@ -62,7 +62,15 @@ class AssinaturaAsaasRule():
         if not customer_id:
             return {"success": False, "message": "Erro ao criar cliente no Asaas", "detail": error}, 500
 
-        sub_response, sub_error = self._criar_assinatura(customer_id, plano, id_usuario)
+        # Cortesia: se o usuário tem trial ativo, a primeira cobrança respeita os dias restantes
+        dias_cortesia = 0
+        trial_ativo = modAssinatura.where(['id_usuario', '=', id_usuario]).where(['status', '=', 'trial']).find()
+        if trial_ativo:
+            trial_ends = trial_ativo[0].get("trial_ends_at")
+            if trial_ends and trial_ends > datetime.now():
+                dias_cortesia = (trial_ends - datetime.now()).days
+
+        sub_response, sub_error = self._criar_assinatura(customer_id, plano, id_usuario, dias_cortesia)
 
         if not sub_response:
             return {"success": False, "message": "Erro ao criar assinatura no Asaas", "detail": sub_error}, 500
@@ -70,7 +78,7 @@ class AssinaturaAsaasRule():
         invoice_url = self._buscar_invoice_url(sub_response.get("id", ""))
 
         now = datetime.now()
-        proxima = now + timedelta(days=30)
+        proxima = now + timedelta(days=dias_cortesia if dias_cortesia > 0 else 30)
 
         obj = {
             "id_usuario": id_usuario,
@@ -195,16 +203,18 @@ class AssinaturaAsaasRule():
 
         return None, str(resp["data"] if resp else "Sem resposta")
 
-    def _criar_assinatura(self, customer_id, plano, id_usuario):
+    def _criar_assinatura(self, customer_id, plano, id_usuario, dias_cortesia=0):
         headers = {
             "access_token": memory.asaas["API_KEY"],
             "Content-Type": "application/json"
         }
 
+        next_due = datetime.now() + timedelta(days=dias_cortesia) if dias_cortesia > 0 else datetime.now()
+
         payload = {
             "customer": customer_id,
             "billingType": "UNDEFINED",
-            "nextDueDate": datetime.now().strftime('%Y-%m-%d'),
+            "nextDueDate": next_due.strftime('%Y-%m-%d'),
             "value": float(plano["valor_original"]),
             "cycle": "MONTHLY",
             "description": plano["nome"] + " - IAvest",
