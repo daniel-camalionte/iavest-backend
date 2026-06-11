@@ -90,6 +90,10 @@
     {
       "name": "Performance",
       "description": "Resultados históricos das IAs de trading — rota pública para landing page"
+    },
+    {
+      "name": "FAQ",
+      "description": "Perguntas frequentes — rota pública para landing page"
     }
   ],
   "schemes": [
@@ -1796,6 +1800,59 @@
           "404": { "description": "Nenhuma assinatura ou cobrança pendente encontrada" },
           "409": { "description": "Assinatura já está ativa" },
           "500": { "description": "Erro ao consultar Asaas" }
+        }
+      }
+    },
+    "/faq": {
+      "get": {
+        "tags": ["FAQ"],
+        "summary": "Listar perguntas frequentes",
+        "description": "Retorna todas as FAQs ativas ordenadas por ordem crescente. Cache de 30 dias em memória. Rota pública — sem autenticação.",
+        "produces": ["application/json"],
+        "responses": {
+          "200": {
+            "description": "Lista retornada com sucesso",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": true },
+                "cached":  { "type": "boolean", "example": false },
+                "faqs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id":       { "type": "integer", "example": 1 },
+                      "pergunta": { "type": "string",  "example": "Como funciona a IAvest?" },
+                      "resposta": { "type": "string",  "example": "A IAvest é uma plataforma de IAs de trading..." },
+                      "video":    { "type": "string",  "example": "https://youtube.com/watch?v=abc123", "nullable": true },
+                      "url":      { "type": "string",  "example": "https://iavest.com.br/saiba-mais", "nullable": true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/faq/cache": {
+      "delete": {
+        "tags": ["FAQ"],
+        "summary": "Limpar cache do FAQ",
+        "description": "Remove o cache em memória do FAQ. A próxima requisição ao GET /faq buscará os dados diretamente do banco.",
+        "produces": ["application/json"],
+        "responses": {
+          "200": {
+            "description": "Cache limpo com sucesso",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": true },
+                "message": { "type": "string",  "example": "Cache limpo com sucesso" }
+              }
+            }
+          }
         }
       }
     },

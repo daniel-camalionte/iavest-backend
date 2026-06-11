@@ -131,6 +131,10 @@ api.add_resource(appController.ChatController, '/chat')
 #Termo Aceite
 api.add_resource(appController.TermoAceiteController, '/termo-aceite')
 
+#FAQ
+api.add_resource(appController.FaqListController, '/faq')
+api.add_resource(appController.FaqCacheClearController, '/faq/cache')
+
 #Performance Landing Page
 api.add_resource(appController.TradePerformanceMensalController, '/performance/mensal')
 api.add_resource(appController.TradePerformanceCacheClearController, '/performance/cache')
