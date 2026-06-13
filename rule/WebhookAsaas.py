@@ -38,8 +38,13 @@ class WebhookAsaasRule():
             ass = assinatura[0]
 
             if event in ["PAYMENT_CONFIRMED", "PAYMENT_RECEIVED"]:
-                now = datetime.now()
-                proxima = now + timedelta(days=30)
+                due_date_str = payment.get("dueDate", "")
+                if due_date_str:
+                    due_date = datetime.strptime(due_date_str, '%Y-%m-%d')
+                    proxima = due_date + timedelta(days=30)
+                else:
+                    proxima = datetime.now() + timedelta(days=30)
+
                 modAssinatura.update({
                     "status": "active",
                     "data_proxima_cobranca": proxima.strftime('%Y-%m-%d %H:%M:%S')

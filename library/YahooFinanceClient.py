@@ -3,12 +3,70 @@ import json
 import ssl
 import urllib.request
 import urllib.parse
+from datetime import date, timedelta
 
 try:
     import certifi
     _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
 except ImportError:
     _SSL_CTX = ssl.create_default_context()
+
+# ---------------------------------------------------------------------------
+# WIN Futures basis adjustment (Ibovespa spot → WIN futures estimated price)
+# ---------------------------------------------------------------------------
+_selic_cache = {}
+
+def _get_selic_anual():
+    today_str = str(date.today())
+    if _selic_cache.get("date") == today_str and _selic_cache.get("rate"):
+        return _selic_cache["rate"]
+    try:
+        url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5, context=_SSL_CTX) as r:
+            data = json.loads(r.read())
+        rate = float(data[0]["valor"]) / 100
+    except Exception:
+        rate = 0.1375  # fallback: Selic atual hardcoded
+    _selic_cache["date"] = today_str
+    _selic_cache["rate"] = rate
+    return rate
+
+
+def _nearest_wed_to_15(year, month):
+    the_15th = date(year, month, 15)
+    wd   = the_15th.weekday()
+    back = (wd - 2) % 7
+    fwd  = (2 - wd) % 7
+    if back <= fwd:
+        return the_15th - timedelta(days=back)
+    return the_15th + timedelta(days=fwd)
+
+
+def _active_win_expiry(ref_date=None):
+    if ref_date is None:
+        ref_date = date.today()
+    for month in [2, 4, 6, 8, 10, 12]:
+        exp = _nearest_wed_to_15(ref_date.year, month)
+        if exp > ref_date:
+            return exp
+    return _nearest_wed_to_15(ref_date.year + 1, 2)
+
+
+def ibov_to_win(price, ref_date=None):
+    """Converte preço do índice Ibovespa (^BVSP) para estimativa do WIN futuro via custo de carrego.
+    Próximo ao vencimento (≤7 dias) o mercado já convergiu — basis não é aplicado."""
+    if price is None:
+        return None
+    if ref_date is None:
+        ref_date = date.today()
+    expiry = _active_win_expiry(ref_date)
+    days   = (expiry - ref_date).days
+    if days <= 7:
+        return round(price)  # mercado convergiu, ^BVSP já é boa proxy
+    selic = _get_selic_anual()
+    return round(price * (1 + selic * days / 252))
+
 
 # Ibovespa no Yahoo Finance
 IBOV_SYMBOL = "%5EBVSP"  # ^BVSP URL-encoded
@@ -19,11 +77,20 @@ YAHOO_MACRO_SYMBOLS = {
     "es1":  {"symbol": "ES%3DF",    "raw": "ES=F",      "name": "S&P 500 Futuro (ES1!)"},
     "nq1":  {"symbol": "NQ%3DF",    "raw": "NQ=F",      "name": "Nasdaq Futuro (NQ1!)"},
     "dxy":  {"symbol": "DX-Y.NYB",  "raw": "DX-Y.NYB",  "name": "Dólar Index (DXY)"},
-    "ewz":  {"symbol": "EWZ",       "raw": "EWZ",       "name": "Brasil ETF (EWZ) — proxy WIN"},
-    "pbr":  {"symbol": "PBR",       "raw": "PBR",       "name": "Petrobras ADR (PBR)"},
-    "vale": {"symbol": "VALE",      "raw": "VALE",      "name": "Vale ADR (VALE)"},
+    "bz":   {"symbol": "BZ%3DF",    "raw": "BZ=F",      "name": "Petróleo Brent (BZ=F)"},
+    "spy":    {"symbol": "%5EGSPC",   "raw": "^GSPC",     "name": "S&P 500 (^GSPC)"},
+    "qqq":    {"symbol": "%5ENDX",    "raw": "^NDX",      "name": "Nasdaq-100 (^NDX)"},
+    "dia":    {"symbol": "%5EDJI",    "raw": "^DJI",      "name": "Dow Jones (^DJI)"},
+    "vxx":    {"symbol": "%5EVIX",    "raw": "^VIX",      "name": "VIX — Volatilidade (^VIX)"},
+    "usdbrl": {"symbol": "BRL%3DX",   "raw": "BRL=X",     "name": "Dólar / Real (USD/BRL)"},
+    "ewz":    {"symbol": "EWZ",       "raw": "EWZ",       "name": "Brasil ETF (EWZ) — proxy WIN"},
+    "pbr":    {"symbol": "PBR",       "raw": "PBR",       "name": "Petrobras ADR (PBR)"},
+    "vale":   {"symbol": "VALE",      "raw": "VALE",      "name": "Vale ADR (VALE)"},
 }
-YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=5d"
+YAHOO_QUOTE_URL    = "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=5d"
+YAHOO_INTRADAY_URL  = "https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?interval={interval}&range=5d"
+YAHOO_FX_INTRADAY_URL    = "https://query1.finance.yahoo.com/v8/finance/chart/BRL%3DX?interval={interval}&range=1d"
+YAHOO_BOVA11_INTRADAY_URL = "https://query1.finance.yahoo.com/v8/finance/chart/BOVA11.SA?interval={interval}&range=5d"
 
 # Quantidade mínima de candles para cálculos confiáveis
 MIN_CANDLES = 200
@@ -329,3 +396,176 @@ class YahooFinanceClient:
             }
         except (KeyError, IndexError, TypeError) as e:
             return {"_error": "Erro ao processar dados do Yahoo Finance", "_detail": str(e)}
+
+    def get_dolfut_intraday(self, interval="15m"):
+        """Retorna variação intraday do USD/BRL como proxy do DOLFUT (correlação inversa com WIN)."""
+        url = YAHOO_FX_INTRADAY_URL.format(interval=interval)
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+        })
+        try:
+            response = urllib.request.urlopen(req, timeout=20, context=_SSL_CTX)
+            data = json.loads(response.read().decode("utf-8"))
+        except Exception as e:
+            return None, str(e)
+
+        try:
+            result     = data["chart"]["result"][0]
+            meta       = result.get("meta", {})
+            quotes     = result["indicators"]["quote"][0]
+            closes     = [c for c in quotes.get("close", []) if c is not None]
+
+            if not closes:
+                return None, "Sem dados de fechamento"
+
+            price      = round(closes[-1], 4)
+            prev_close = meta.get("chartPreviousClose") or meta.get("previousClose")
+
+            if prev_close and prev_close > 0:
+                change_pct = round((price - prev_close) / prev_close * 100, 4)
+            else:
+                opens    = [o for o in quotes.get("open", []) if o is not None]
+                day_open = opens[0] if opens else None
+                change_pct = round((price - day_open) / day_open * 100, 4) if day_open else None
+
+            # Correlação inversa: USD/BRL sobe → WIN tende a cair
+            if change_pct is not None:
+                impacto_win = "bearish" if change_pct > 0.1 else ("bullish" if change_pct < -0.1 else "neutro")
+            else:
+                impacto_win = None
+
+            return {"price": price, "change_pct": change_pct, "impacto_win": impacto_win}, None
+        except Exception as e:
+            return None, str(e)
+
+    def get_bova11_intraday(self, interval="15m", avg_periods=20):
+        """Volume real do BOVA11.SA como proxy de liquidez do WIN (mesma bolsa, mesmos horários)."""
+        url = YAHOO_BOVA11_INTRADAY_URL.format(interval=interval)
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+        })
+        try:
+            response = urllib.request.urlopen(req, timeout=20, context=_SSL_CTX)
+            data = json.loads(response.read().decode("utf-8"))
+        except Exception as e:
+            return None, str(e)
+
+        try:
+            result     = data["chart"]["result"][0]
+            timestamps = result.get("timestamp", [])
+            quotes     = result["indicators"]["quote"][0]
+
+            closes  = quotes.get("close",  [])
+            highs   = quotes.get("high",   [])
+            lows    = quotes.get("low",    [])
+            opens   = quotes.get("open",   [])
+            volumes = quotes.get("volume", [])
+
+            candles     = []
+            raw_volumes = []
+            for i, ts in enumerate(timestamps):
+                c = closes[i]  if i < len(closes)  else None
+                h = highs[i]   if i < len(highs)   else None
+                l = lows[i]    if i < len(lows)    else None
+                o = opens[i]   if i < len(opens)   else None
+                v = volumes[i] if i < len(volumes) else None
+                if c is None or h is None or l is None:
+                    continue
+                candles.append({
+                    "datetime": ts,
+                    "open":  round(o if o else c, 2),
+                    "high":  round(h, 2),
+                    "low":   round(l, 2),
+                    "close": round(c, 2),
+                    "volume": int(v) if v else 0,
+                })
+                if v is not None and v > 0:
+                    raw_volumes.append(int(v))
+
+            if not candles or not raw_volumes:
+                return None, "Sem dados suficientes"
+
+            current_vol = raw_volumes[-1]
+            history     = raw_volumes[:-1][-avg_periods:]
+
+            if not history:
+                return None, "Histórico insuficiente"
+
+            avg_vol = sum(history) / len(history)
+            vol_rel = round(current_vol / avg_vol, 2) if avg_vol > 0 else None
+
+            if vol_rel is None:
+                nivel = None
+            elif vol_rel >= 2.0:
+                nivel = "muito_alto"
+            elif vol_rel >= 1.5:
+                nivel = "alto"
+            elif vol_rel >= 0.8:
+                nivel = "normal"
+            elif vol_rel >= 0.5:
+                nivel = "baixo"
+            else:
+                nivel = "muito_baixo"
+
+            return {
+                "volume":     current_vol,
+                "avg_volume": round(avg_vol),
+                "vol_rel":    vol_rel,
+                "nivel":      nivel,
+                "candles":    candles,
+            }, None
+        except Exception as e:
+            return None, str(e)
+
+    def get_ibov_intraday(self, interval="15m"):
+        """Retorna candles intraday do Ibovespa (^BVSP) em ordem ASC."""
+        url = YAHOO_INTRADAY_URL.format(interval=interval)
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+        })
+        try:
+            response = urllib.request.urlopen(req, timeout=20, context=_SSL_CTX)
+            data = json.loads(response.read().decode("utf-8"))
+        except Exception as e:
+            return None, str(e)
+
+        try:
+            result     = data["chart"]["result"][0]
+            timestamps = result.get("timestamp", [])
+            quotes     = result["indicators"]["quote"][0]
+
+            closes  = quotes.get("close",  [])
+            highs   = quotes.get("high",   [])
+            lows    = quotes.get("low",    [])
+            opens   = quotes.get("open",   [])
+            volumes = quotes.get("volume", [])
+
+            candles = []
+            for i, ts in enumerate(timestamps):
+                c = closes[i]  if i < len(closes)  else None
+                h = highs[i]   if i < len(highs)   else None
+                l = lows[i]    if i < len(lows)    else None
+                o = opens[i]   if i < len(opens)   else None
+                v = volumes[i] if i < len(volumes) else None
+
+                if c is None or h is None or l is None:
+                    continue
+
+                candles.append({
+                    "datetime": ts,
+                    "open":     round(o if o else c),
+                    "high":     round(h),
+                    "low":      round(l),
+                    "close":    round(c),
+                    "volume":   int(v) if v else 0,
+                })
+
+            if not candles:
+                return None, "Nenhum candle retornado"
+
+            return candles, None
+        except (KeyError, IndexError, TypeError) as e:
+            return None, str(e)

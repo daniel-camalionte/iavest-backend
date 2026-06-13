@@ -13,11 +13,7 @@ BASE_URL = "https://api.twelvedata.com"
 
 # Ativos macro (spot) — 6 créditos
 MACRO_SYMBOLS = {
-    "spy":    {"symbol": "SPY",     "name": "S&P 500 (SPY)"},
-    "qqq":    {"symbol": "QQQ",     "name": "Nasdaq (QQQ)"},
     "dia":    {"symbol": "DIA",     "name": "Dow Jones (DIA)"},
-    "uso":    {"symbol": "USO",     "name": "Petróleo WTI (USO)"},
-    "vxx":    {"symbol": "VXX",     "name": "VIX — Volatilidade (VXX)"},
     "usdbrl": {"symbol": "USD/BRL", "name": "Dólar / Real (USD/BRL)"},
 }
 
@@ -88,6 +84,38 @@ class TwelveDataClient:
             result[key] = self._parse_quote(raw, sym, meta["name"])
 
         return result
+
+    # -------------------------------------------------------------------------
+    # Candles intraday (time_series)
+    # -------------------------------------------------------------------------
+    def get_intraday_candles(self, symbol="WIN1!", interval="15min", outputsize=60):
+        """Retorna lista de candles OHLCV em ordem ASC, ou (None, mensagem_erro)."""
+        data = self._get("time_series", {
+            "symbol":     symbol,
+            "interval":   interval,
+            "outputsize": outputsize,
+            "order":      "ASC",
+        })
+        if not data or data.get("status") == "error":
+            msg = data.get("message", "Erro TwelveData") if data else "Sem resposta"
+            return None, msg
+        values = data.get("values", [])
+        if not values:
+            return None, "Nenhum candle retornado"
+        candles = []
+        for v in values:
+            try:
+                candles.append({
+                    "datetime": v["datetime"],
+                    "open":     float(v["open"]),
+                    "high":     float(v["high"]),
+                    "low":      float(v["low"]),
+                    "close":    float(v["close"]),
+                    "volume":   int(v.get("volume") or 0),
+                })
+            except (KeyError, TypeError, ValueError):
+                continue
+        return candles, None
 
     # -------------------------------------------------------------------------
     # Debug

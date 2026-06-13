@@ -7,7 +7,7 @@ class MarketAnalysisModel(BaseModel):
         super().__init__()
 
     def table(self):
-        return 'market_analysis'
+        return 'analysis_market'
 
     def pk(self):
         return 'id_market_analysis'

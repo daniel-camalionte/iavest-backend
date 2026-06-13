@@ -34,6 +34,7 @@ class AssinaturaRule():
         modAssinatura.save({
             "id_usuario":    id_usuario,
             "id_plano":      plano_trial[0]["id_plano"],
+            "gateway":       "trial",
             "status":        "trial",
             "data_inicio":   agora.strftime('%Y-%m-%d %H:%M:%S'),
             "trial_ends_at": trial_ends.strftime('%Y-%m-%d %H:%M:%S'),

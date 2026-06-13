@@ -3,9 +3,10 @@ from flask.views import MethodView
 from flask_jwt_extended import jwt_required
 
 from rule.MarketAnalysis import MarketAnalysisRule, MarketAnalysisListRule, MarketAnalysisDetailRule
-from library.TwelveDataClient import TwelveDataClient
+from rule.IntradayAnalysis import IntradayAnalysisRule, IntradayAnalysisLatestRule, IntradayAnalysisListRule
 from library.YahooFinanceClient import YahooFinanceClient
 from library.HttpClient import HttpClient
+from library.SchedulerAuth import check_scheduler_auth
 import config.env as memory
 
 
@@ -52,9 +53,15 @@ class MarketAnalyzeController(MethodView):
 
     contracts define o máximo de contratos — o sistema recalcula a quantidade
     real com base no score e no nível do VIX.
+
+    Requer header Authorization: <SCHEDULER_SECRET>
     """
 
     def get(self):
+        auth_error = check_scheduler_auth()
+        if auth_error:
+            return auth_error
+
         try:
             id_ativos_base = int(request.args.get("id_ativos_base", 0))
         except (TypeError, ValueError):
@@ -107,17 +114,14 @@ class MarketDebugController(MethodView):
     """
     GET /market/debug
 
-    Retorna as respostas brutas de ambas as fontes de dados para diagnóstico:
-    - Twelve Data (macro US)
-    - Yahoo Finance (técnicos Ibovespa)
+    Retorna as respostas brutas do Yahoo Finance para diagnóstico.
     """
 
     def get(self):
-        td = TwelveDataClient(memory.twelvedata["API_KEY"])
         yf = YahooFinanceClient()
         return {
-            "twelve_data_macro":     td.debug_raw(),
-            "yahoo_ibov_technical":  yf.get_ibov_technical(),
+            "yahoo_macro":          yf.get_yahoo_macro_quotes(),
+            "yahoo_ibov_technical": yf.get_ibov_technical(),
         }, 200
 
 
@@ -153,3 +157,69 @@ class MarketAnalysisDetailController(MethodView):
             id_market_analysis=id_market_analysis,
             id_ativos_base=id_ativos_base,
         )
+
+
+class IntradayAnalyzeController(MethodView):
+    """
+    POST /market/intraday?id_ativos_base=1&interval_min=15
+
+    Executa análise intraday do WIN via Claude Haiku 4.5.
+    Requer análise fundamentalista do dia já executada.
+    Requer header Authorization: <SCHEDULER_SECRET>
+    """
+
+    def post(self):
+        auth_error = check_scheduler_auth()
+        if auth_error:
+            return auth_error
+
+        try:
+            id_ativos_base = int(request.args.get("id_ativos_base", 1))
+        except (TypeError, ValueError):
+            return {"error": "Parâmetro 'id_ativos_base' deve ser um número inteiro"}, 400
+
+        try:
+            interval_min = int(request.args.get("interval_min", 15))
+        except (TypeError, ValueError):
+            return {"error": "Parâmetro 'interval_min' deve ser um número inteiro"}, 400
+
+        if interval_min not in (5, 15, 30):
+            return {"error": "Parâmetro 'interval_min' deve ser 5, 15 ou 30"}, 400
+
+        return IntradayAnalysisRule.analyze(
+            id_ativos_base=id_ativos_base,
+            interval_min=interval_min,
+        )
+
+
+class IntradayAnalysisLatestController(MethodView):
+    """GET /market/intraday/latest — último sinal intraday (cache 5min)"""
+
+    def get(self):
+        try:
+            id_ativos_base = int(request.args.get("id_ativos_base", 0)) or None
+        except (TypeError, ValueError):
+            id_ativos_base = None
+
+        return IntradayAnalysisLatestRule.latest(id_ativos_base=id_ativos_base)
+
+
+class IntradayAnalysisListController(MethodView):
+    """GET /market/intraday/list?id_market_analysis=X&limit=50&offset=0"""
+
+    def get(self):
+        try:
+            id_market_analysis = int(request.args.get("id_market_analysis", 0))
+        except (TypeError, ValueError):
+            return {"error": "Parâmetro 'id_market_analysis' é obrigatório e deve ser inteiro"}, 400
+
+        if not id_market_analysis:
+            return {"error": "Parâmetro 'id_market_analysis' é obrigatório"}, 400
+
+        try:
+            limit  = max(1, min(int(request.args.get("limit",  50)), 200))
+            offset = max(0, int(request.args.get("offset", 0)))
+        except (TypeError, ValueError):
+            limit, offset = 50, 0
+
+        return IntradayAnalysisListRule.list_by_market(id_market_analysis, limit, offset)

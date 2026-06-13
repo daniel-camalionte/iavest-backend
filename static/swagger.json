@@ -84,6 +84,10 @@
       "description": "Análise de mercado com IA (Claude Opus 4) — WIN, WDO e futuros ativos"
     },
     {
+      "name": "Intraday Analysis",
+      "description": "Análise intraday do WIN a cada 15min via Claude Haiku 4.5 — stop loss, alvos e justificativa técnica"
+    },
+    {
       "name": "Termo Aceite",
       "description": "Registro de aceite de termos pelo usuário"
     },
@@ -273,9 +277,17 @@
       "get": {
         "tags": ["Market Analysis"],
         "summary": "Análise de mercado com IA",
-        "description": "Coleta dados macroeconômicos (SPY, QQQ, DIA, ES1!, NQ1!, USO, VXX, USD/BRL, DXY, EWZ, PBR, VALE) e indicadores técnicos do ativo via Yahoo Finance, envia para o Claude Opus 4 e retorna recomendação de operação (COMPRA, VENDA ou INDEFINIÇÃO) com contratos ajustados ao score e VIX. Resultado é cacheado por TTL configurável (padrão 24h). A análise também é persistida na tabela market_analysis.",
+        "description": "Coleta dados macroeconômicos (^GSPC, ^NDX, ^DJI, ES=F, NQ=F, BZ=F, ^VIX, BRL=X, DX-Y.NYB, EWZ, PBR, VALE) e indicadores técnicos do Ibovespa via Yahoo Finance, envia para o Claude Opus 4 e retorna recomendação de operação (COMPRA, VENDA ou INDEFINIÇÃO) com contratos ajustados ao score e VIX. Resultado é cacheado por TTL configurável (padrão 24h). A análise também é persistida na tabela analysis_market. Requer header Authorization com SCHEDULER_SECRET.",
         "produces": ["application/json"],
         "parameters": [
+          {
+            "name": "X-Scheduler-Secret",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "description": "Hash fixa do scheduler (SCHEDULER_SECRET da env).",
+            "default": "3f8a9b0c1d2e4f5a6b7c8d9e0f1a2b3c"
+          },
           {
             "name": "id_ativos_base",
             "in": "query",
@@ -1926,6 +1938,123 @@
         }
       }
     },
+    "/market/intraday": {
+      "post": {
+        "tags": ["Intraday Analysis"],
+        "summary": "Executar análise intraday WIN",
+        "description": "Busca candles do WIN via Yahoo Finance (^BVSP), volume via BOVA11, DOLFUT via BRL=X. Calcula RSI/MACD/EMA/ATR/S&R/EMA crossover em 15min e 5min, coleta níveis do dia anterior, Opening Range (persistido em analysis_intraday_or), macro atual (VIX, USD/BRL) e envia tudo para o Claude Haiku 4.5. Preços ajustados pelo basis WIN via custo de carrego (Selic BCB). Avalia resultado da análise anterior antes de salvar a nova. Requer análise fundamentalista do dia já executada. Persiste na tabela analysis_intraday e invalida o cache do GET /latest.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "X-Scheduler-Secret",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "description": "Hash fixa do scheduler (SCHEDULER_SECRET da env).",
+            "default": "3f8a9b0c1d2e4f5a6b7c8d9e0f1a2b3c"
+          },
+          {
+            "name": "id_ativos_base",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 1,
+            "description": "ID do ativo (1 = WIN)"
+          },
+          {
+            "name": "interval_min",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 15,
+            "description": "Intervalo dos candles em minutos. Valores aceitos: 5, 15, 30."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Análise intraday gerada e salva com sucesso",
+            "schema": { "$ref": "#/definitions/IntradayAnalysisResponse" }
+          },
+          "401": { "description": "X-Scheduler-Secret inválido ou ausente" },
+          "422": { "description": "Pregão fechado, análise duplicada ou análise fundamentalista do dia não executada" },
+          "502": { "description": "Erro ao buscar candles do Yahoo Finance ou ao chamar o Claude Haiku" }
+        }
+      }
+    },
+    "/market/intraday/latest": {
+      "get": {
+        "tags": ["Intraday Analysis"],
+        "summary": "Último sinal intraday",
+        "description": "Retorna o sinal intraday mais recente. Cache em memória de 5 minutos — leituras simultâneas do frontend não geram múltiplas consultas ao banco. Rota pública, sem autenticação.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "id_ativos_base",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "description": "Filtro por ativo (1 = WIN). Sem filtro retorna o último geral."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sinal retornado (ou do cache)",
+            "schema": { "$ref": "#/definitions/IntradayAnalysisResponse" }
+          },
+          "404": { "description": "Nenhuma análise intraday disponível" }
+        }
+      }
+    },
+    "/market/intraday/list": {
+      "get": {
+        "tags": ["Intraday Analysis"],
+        "summary": "Histórico intraday do dia",
+        "description": "Retorna sinais intraday vinculados a uma análise fundamentalista do dia, em ordem cronológica crescente, com paginação via limit/offset.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "id_market_analysis",
+            "in": "query",
+            "required": true,
+            "type": "integer",
+            "description": "ID da análise fundamentalista do dia (id_market_analysis)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 50,
+            "description": "Máximo de registros retornados (1–200, default 50)"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 0,
+            "description": "Quantidade de registros a pular (default 0)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de sinais do dia",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "array",
+                  "items": { "$ref": "#/definitions/IntradayAnalysisResponse" }
+                },
+                "limit":  { "type": "integer", "example": 50 },
+                "offset": { "type": "integer", "example": 0 }
+              }
+            }
+          },
+          "400": { "description": "Parâmetro id_market_analysis ausente ou inválido" }
+        }
+      }
+    },
     "/webhook/asaas": {
       "post": {
         "tags": ["Asaas"],
@@ -1949,6 +2078,79 @@
     }
   },
   "definitions": {
+    "IntradayAnalysisResponse": {
+      "type": "object",
+      "properties": {
+        "id_intraday_analysis": { "type": "integer", "example": 42 },
+        "id_ativos_base":       { "type": "integer", "example": 1 },
+        "id_market_analysis":   { "type": "integer", "example": 15 },
+        "analyzed_at":          { "type": "string",  "example": "2026-06-12 10:15:00" },
+        "candle_datetime":      { "type": "string",  "example": "2026-06-12 10:00:00", "description": "Datetime do candle analisado" },
+        "candle_age_min":       { "type": "integer", "example": 8, "description": "Minutos entre o candle e o momento da análise" },
+        "interval_min":         { "type": "integer", "example": 15 },
+        "win_price":            { "type": "integer", "example": 171134, "description": "Fechamento do candle ajustado pelo basis WIN" },
+        "win_open":             { "type": "integer", "example": 171034 },
+        "win_high":             { "type": "integer", "example": 171204 },
+        "win_low":              { "type": "integer", "example": 170964 },
+        "win_volume":           { "type": "integer", "example": null, "description": "Sempre null — ^BVSP não reporta volume intraday" },
+        "win_atr":              { "type": "number",  "example": 200.0 },
+        "ti_rsi":               { "type": "number",  "example": 58.4 },
+        "ti_macd":              { "type": "number",  "example": 85.2 },
+        "ti_macd_signal":       { "type": "number",  "example": 62.1 },
+        "ti_macd_hist":         { "type": "number",  "example": 23.1 },
+        "ti_ema9":              { "type": "integer", "example": 171175 },
+        "ti_ema21":             { "type": "integer", "example": 171173 },
+        "ema_sinal":            { "type": "string",  "enum": ["alta", "baixa", "bullish_cross", "bearish_cross"], "example": "alta", "description": "Direção das EMAs 9/21 no 15min" },
+        "tf5_rsi":              { "type": "number",  "example": 47.37, "description": "RSI no timeframe de 5min" },
+        "tf5_macd_hist":        { "type": "number",  "example": -0.49, "description": "MACD histograma no 5min" },
+        "tf5_ema_sinal":        { "type": "string",  "enum": ["alta", "baixa", "bullish_cross", "bearish_cross"], "example": "baixa" },
+        "tf5_alinhamento":      { "type": "string",  "enum": ["alinhado_compra", "alinhado_venda", "conflitante"], "example": "conflitante", "description": "Alinhamento entre 15min e 5min" },
+        "sr_resistance_1":      { "type": "integer", "example": 171325, "description": "Resistência mais próxima" },
+        "sr_resistance_2":      { "type": "integer", "example": 171396, "description": "Segunda resistência" },
+        "sr_support_1":         { "type": "integer", "example": 171054, "description": "Suporte mais próximo" },
+        "sr_support_2":         { "type": "integer", "example": 170956, "description": "Segundo suporte" },
+        "mc_vix":               { "type": "number",  "example": 17.64 },
+        "mc_vix_level":         { "type": "string",  "enum": ["baixo", "medio", "alto"], "example": "baixo" },
+        "mc_usdbrl":            { "type": "number",  "example": 5.06 },
+        "prev_day_high":        { "type": "integer", "example": 171927, "description": "Máxima do dia anterior" },
+        "prev_day_low":         { "type": "integer", "example": 168280, "description": "Mínima do dia anterior" },
+        "prev_day_close":       { "type": "integer", "example": 171497, "description": "Fechamento do dia anterior" },
+        "or_high":              { "type": "integer", "example": 171500, "description": "Máxima do Opening Range (09:00–09:30). Persistido em analysis_intraday_or." },
+        "or_low":               { "type": "integer", "example": 171100, "description": "Mínima do Opening Range (09:00–09:30)" },
+        "dolfut_price":         { "type": "number",  "example": 5.0628, "description": "USD/BRL spot (proxy DOLFUT via BRL=X)" },
+        "dolfut_chg_pct":       { "type": "number",  "example": -0.72, "description": "Variação % do dólar. Negativo = bullish para WIN" },
+        "bova11_volume":        { "type": "integer", "example": 354103, "description": "Volume do candle atual do BOVA11 (proxy volume WIN)" },
+        "bova11_vol_rel":       { "type": "number",  "example": 2.13, "description": "Volume relativo vs média dos últimos 20 candles" },
+        "bova11_vol_nivel":     { "type": "string",  "enum": ["muito_alto", "alto", "normal", "baixo", "muito_baixo"], "example": "muito_alto" },
+        "ai_direcao":           { "type": "string",  "enum": ["compra", "venda", "neutro"], "example": "compra" },
+        "ai_forca":             { "type": "string",  "enum": ["fraca", "media", "forte"], "example": "media" },
+        "ai_confianca":         { "type": "integer", "example": 62 },
+        "ai_stop_loss":         { "type": "integer", "example": 170964, "description": "Null quando ai_direcao=neutro" },
+        "ai_alvo_1":            { "type": "integer", "example": 171325, "description": "Null quando ai_direcao=neutro" },
+        "ai_alvo_2":            { "type": "integer", "example": 171396, "description": "Null quando ai_direcao=neutro" },
+        "ai_risco_pontos":      { "type": "integer", "example": 170 },
+        "ai_risco_reais":       { "type": "number",  "example": 34.0, "description": "risco_pontos × R$0,20 por contrato" },
+        "ai_relacao_rr":        { "type": "string",  "example": "T1 1:1.12 / T2 1:1.54" },
+        "ai_confluencias": {
+          "type": "array",
+          "items": { "type": "string" },
+          "example": ["EMAs em alta no 15min", "Dólar em queda (-0.72%)", "Volume BOVA11 muito alto (2.13x)"]
+        },
+        "ai_riscos": {
+          "type": "array",
+          "items": { "type": "string" },
+          "example": ["Conflito 5min/15min", "MACD histograma negativo", "Candle age 141min"]
+        },
+        "ai_resumo":        { "type": "string",  "example": "Compra média com volume alto e dólar favorável, cautela pelo conflito 5/15min." },
+        "ai_justificativa": { "type": "string",  "example": "As EMAs estão alinhadas em alta no 15min..." },
+        "resultado":        { "type": "string",  "enum": ["stop_atingido", "alvo_1_atingido", "alvo_2_atingido", "expirado", "neutro"], "example": null, "description": "Preenchido automaticamente na próxima análise do dia" },
+        "resultado_preco":  { "type": "integer", "example": null, "description": "Preço no momento em que o resultado foi atingido" },
+        "resultado_at":     { "type": "string",  "example": null, "description": "Datetime em que o resultado foi avaliado" },
+        "vies_do_dia":      { "type": "string",  "example": "INDEFINIÇÃO", "description": "Recomendação da análise fundamentalista matinal" },
+        "confianca_manha":  { "type": "string",  "example": "MEDIA", "description": "Confiança da análise fundamentalista matinal" },
+        "created_at":       { "type": "string",  "example": "2026-06-12 10:15:05" }
+      }
+    },
     "MarketAnalysisGridItem": {
       "type": "object",
       "properties": {

@@ -106,6 +106,17 @@ trial = {
     "DAYS": int(os.environ.get("TRIAL_DAYS", 10))
 }
 
+# SCHEDULER
+scheduler = {
+    "SECRET": os.environ.get("SCHEDULER_SECRET", "")
+}
+
+# INTRADAY
+intraday = {
+    "WIN_SYMBOL":   os.environ.get("INTRADAY_WIN_SYMBOL", "WIN1!"),
+    "INTERVAL_MIN": int(os.environ.get("INTRADAY_INTERVAL_MIN", 15)),
+}
+
 # TICKET / SUPORTE
 ticket = {
     "SUPPORT_EMAILS": os.environ.get("TICKET_SUPPORT_EMAILS", "dcamalionte@gmail.com")

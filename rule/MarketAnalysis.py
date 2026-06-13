@@ -5,8 +5,7 @@ from datetime import datetime, date, timezone, timedelta
 
 import config.env as memory
 from library.HttpClient import HttpClient
-from library.TwelveDataClient import TwelveDataClient
-from library.YahooFinanceClient import YahooFinanceClient
+from library.YahooFinanceClient import YahooFinanceClient, ibov_to_win
 from model.MarketAnalysis import MarketAnalysisModel
 
 # ---------------------------------------------------------------------------
@@ -74,14 +73,14 @@ Score Técnico (0–100):
 - Dias consecutivos: ≥3 dias na mesma direção = +4 (momentum), ≤-3 = -4
 
 Score Macro (0–100):
-- S&P 500 (SPY):         alta >0.5% = +18, estável = +10, queda >0.5% = 0
-- Nasdaq (QQQ):          alta >0.5% = +11, estável = +6, queda >0.5% = 0
-- Dow Jones (DIA):       alta >0.5% = +7, estável = +4, queda >0.5% = 0
+- S&P 500 (^GSPC):       alta >0.5% = +18, estável = +10, queda >0.5% = 0
+- Nasdaq-100 (^NDX):     alta >0.5% = +11, estável = +6, queda >0.5% = 0
+- Dow Jones (^DJI):      alta >0.5% = +7, estável = +4, queda >0.5% = 0
 - Futuros S&P (ES1!):    alta >0.3% pré-mercado = +4 bônus, queda >0.3% = -4
 - Futuros Nasdaq (NQ1!): alta >0.3% pré-mercado = +3 bônus, queda >0.3% = -3
-- Petróleo (USO):        preço >100 = -15 (inflação), 80–100 = 0, <80 = +4
+- Petróleo Brent (BZ=F): preço >100 = -15 (inflação), 80–100 = 0, <80 = +4
 - USD/BRL:               variação >1% = -12 (fuga de capital), <-1% = +12, estável = 0
-- VIX (VXX):             <20 = +14 (baixo estresse), 20–30 = +7 (médio), >30 = 0 (alto)
+- VIX (^VIX):            <20 = +14 (baixo estresse), 20–30 = +7 (médio), >30 = 0 (alto)
 - DXY (Dólar Index):     alta >0.5% = -14 (risco emergentes), estável = 0, queda >0.5% = +14
 - Brasil ETF (EWZ):      alta >1% = +18 (proxy direto do WIN gap), estável = +9, queda >1% = 0 — este é o indicador mais relevante para prever gap de abertura do Mini Índice
 - Petrobras ADR (PBR):   alta >1% = +15, estável = +7, queda >1% = 0
@@ -361,6 +360,17 @@ class BaseMarketAnalyzer(ABC):
         # --- Cache MISS ---
         macro, technical = self._fetch_data()
 
+        # Ajuste basis WIN: converte preços do ^BVSP para estimativa do WIN futuro
+        _today = date.today()
+        for _f in ("price", "prev_close", "prev_high", "prev_low",
+                   "sma9", "sma21", "sma50", "sma200", "ema9", "ema21"):
+            if technical.get(_f) is not None:
+                technical[_f] = ibov_to_win(technical[_f], _today)
+        _bb = technical.get("bbands") or {}
+        for _f in ("upper", "middle", "lower"):
+            if _bb.get(_f) is not None:
+                _bb[_f] = ibov_to_win(_bb[_f], _today)
+
         if "_error" in macro:
             return {"error": "Falha ao coletar dados macro", "detail": macro["_error"]}, 503
         if technical.get("_error") and technical.get("price") is None:
@@ -555,11 +565,8 @@ class WINAnalyzer(BaseMarketAnalyzer):
     id_ativos_base = 1
 
     def _fetch_data(self):
-        td      = TwelveDataClient(memory.twelvedata["API_KEY"])
-        yf      = YahooFinanceClient()
-        macro   = td.get_macro_quotes()
-        futures = yf.get_yahoo_macro_quotes()
-        macro.update(futures)
+        yf        = YahooFinanceClient()
+        macro     = yf.get_yahoo_macro_quotes()
         technical = yf.get_ibov_technical()
         return macro, technical
 
