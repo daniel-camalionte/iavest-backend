@@ -735,7 +735,7 @@ class IntradayAnalysisListRule:
     def list_by_market(id_market_analysis, limit=50, offset=0):
         model = IntradayAnalysisModel()
         model.where(["id_market_analysis", "=", id_market_analysis])
-        rows = model.order("analyzed_at", "ASC").limit(limit).offset(offset).find() or []
+        rows = model.order("analyzed_at", "DESC").limit(limit).offset(offset).find() or []
         return {
             "data":   [_serialize_row(r) for r in rows],
             "limit":  limit,
