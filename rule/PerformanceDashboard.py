@@ -24,12 +24,22 @@ def _build_est_filter(estrategias):
     return f"AND t.id_estrategia IN ({placeholders})", list(estrategias)
 
 
+def _relacao_rr(media_ganho, media_perda):
+    """media_ganho / abs(media_perda), None se sem dados."""
+    if not media_ganho or not media_perda:
+        return None
+    return round(media_ganho / abs(media_perda), 2)
+
+
 def _build_mensal_kpis(meses_raw, estrategia_map):
     mensal = []
     capital_acumulado = 0.0
     pico = 0.0
     drawdown_max = 0.0
+
+    # acumuladores globais
     total_ops = total_wins = 0
+    g_total_ganho = g_total_perda = 0.0
 
     for mes_key in sorted(meses_raw.keys()):
         year, month = mes_key.split('-')
@@ -41,6 +51,8 @@ def _build_mensal_kpis(meses_raw, estrategia_map):
         wins_mes  = sum(v['wins']  for v in data.values())
         total_ops  += ops_mes
         total_wins += wins_mes
+        g_total_ganho += sum(v['total_ganho'] for v in data.values())
+        g_total_perda += sum(v['total_perda'] for v in data.values())
 
         capital_acumulado += ganho_mes
         if capital_acumulado > pico:
@@ -53,12 +65,19 @@ def _build_mensal_kpis(meses_raw, estrategia_map):
         for id_est, nome in estrategia_map.items():
             d = data.get(id_est)
             if d:
+                mg = round(d['total_ganho'] / d['wins'],  2) if d['wins']                    else None
+                mp = round(d['total_perda'] / (d['total'] - d['wins']), 2) if (d['total'] - d['wins']) else None
                 ias[nome] = {
-                    'ganho':      round(d['ganho'], 2),
-                    'operacoes':  d['total'],
-                    'wins':       d['wins'],
-                    'losses':     d['total'] - d['wins'],
-                    'acerto_pct': round(d['wins'] / d['total'] * 100, 1) if d['total'] else 0,
+                    'ganho':        round(d['ganho'], 2),
+                    'operacoes':    d['total'],
+                    'wins':         d['wins'],
+                    'losses':       d['total'] - d['wins'],
+                    'acerto_pct':   round(d['wins'] / d['total'] * 100, 1) if d['total'] else 0,
+                    'total_ganho':  round(d['total_ganho'], 2),
+                    'total_perda':  round(d['total_perda'], 2),
+                    'media_ganho':  mg,
+                    'media_perda':  mp,
+                    'relacao_rr':   _relacao_rr(mg, mp),
                 }
             else:
                 ias[nome] = None
@@ -77,12 +96,21 @@ def _build_mensal_kpis(meses_raw, estrategia_map):
     melhor = max(mensal, key=lambda x: x['ganho']) if mensal else None
     pior   = min(mensal, key=lambda x: x['ganho']) if mensal else None
 
+    total_losses = total_ops - total_wins
+    g_media_ganho = round(g_total_ganho / total_wins,   2) if total_wins   else None
+    g_media_perda = round(g_total_perda / total_losses, 2) if total_losses else None
+
     kpis = {
         'total_operacoes':     total_ops,
         'wins':                total_wins,
-        'losses':              total_ops - total_wins,
+        'losses':              total_losses,
         'acerto_pct':          round(total_wins / total_ops * 100, 1) if total_ops else 0,
         'lucro_total':         round(capital_acumulado, 2),
+        'total_ganho':         round(g_total_ganho, 2),
+        'total_perda':         round(g_total_perda, 2),
+        'media_ganho':         g_media_ganho,
+        'media_perda':         g_media_perda,
+        'relacao_rr':          _relacao_rr(g_media_ganho, g_media_perda),
         'drawdown_maximo_pct': round(drawdown_max, 2),
         'melhor_mes':          {'mes': melhor['mes_label'], 'ganho': melhor['ganho']} if melhor else None,
         'pior_mes':            {'mes': pior['mes_label'],   'ganho': pior['ganho']}   if pior   else None,
@@ -149,12 +177,14 @@ class PerformanceDashboardRule:
 
         sql = f"""
             SELECT
-                DATE_FORMAT(t.closed_at, '%%Y-%%m')                      AS mes,
+                DATE_FORMAT(t.closed_at, '%%Y-%%m')                                        AS mes,
                 t.id_estrategia,
                 e.nome,
-                COUNT(*)                                                   AS total,
-                SUM(CASE WHEN t.operation = 'profit' THEN 1 ELSE 0 END)  AS wins,
-                SUM(t.profit_loss)                                         AS ganho_total
+                COUNT(*)                                                                     AS total,
+                SUM(CASE WHEN t.operation = 'profit' THEN 1     ELSE 0    END)              AS wins,
+                SUM(t.profit_loss)                                                           AS ganho_total,
+                SUM(CASE WHEN t.operation = 'profit' THEN t.profit_loss ELSE 0 END)         AS total_ganho,
+                SUM(CASE WHEN t.operation = 'loss'   THEN t.profit_loss ELSE 0 END)         AS total_perda
             FROM trade t
             INNER JOIN estrategia e ON e.id_estrategia = t.id_estrategia
             WHERE t.account_number = %s
@@ -177,14 +207,21 @@ class PerformanceDashboardRule:
             if mes not in meses_raw:
                 meses_raw[mes] = {}
             meses_raw[mes][id_est] = {
-                'nome':  r['nome'],
-                'ganho': float(r['ganho_total'] or 0),
-                'total': int(r['total'] or 0),
-                'wins':  int(r['wins']  or 0),
+                'nome':        r['nome'],
+                'ganho':       float(r['ganho_total']  or 0),
+                'total':       int(r['total']           or 0),
+                'wins':        int(r['wins']            or 0),
+                'total_ganho': float(r['total_ganho']  or 0),
+                'total_perda': float(r['total_perda']  or 0),
             }
 
         mensal, kpis = _build_mensal_kpis(meses_raw, estrategia_map)
         radar_ia     = _fetch_radar_ia(date_from, date_to)
+
+        estrategias_list = [
+            {'id': id_est, 'nome': nome}
+            for id_est, nome in sorted(estrategia_map.items())
+        ]
 
         return {
             'success':        True,
@@ -192,6 +229,7 @@ class PerformanceDashboardRule:
             'accounts':       valid_numbers,
             'date_from':      date_from,
             'date_to':        date_to,
+            'estrategias':    estrategias_list,
             'kpis':           kpis,
             'mensal':         mensal,
             'radar_ia':       radar_ia,
@@ -242,12 +280,28 @@ class PerformanceDashboardRule:
         params = tuple([active, date_from, date_to] + est_params + [limit, offset])
         rows   = MySql().fetch(sql, params) or []
 
+        count_sql = f"""
+            SELECT COUNT(*) AS total
+            FROM trade t
+            WHERE t.account_number = %s
+              AND t.status = 'closed'
+              AND t.index_start IS NOT NULL
+              AND t.index_exit  IS NOT NULL
+              AND t.profit_loss IS NOT NULL
+              AND DATE(t.closed_at) BETWEEN %s AND %s
+              {est_clause}
+        """
+        count_row = MySql().fetch(count_sql, tuple([active, date_from, date_to] + est_params))
+        total = int(count_row[0]['total']) if count_row else 0
+
         return {
             'success':        True,
             'account_number': active,
             'date_from':      date_from,
             'date_to':        date_to,
+            'total':          total,
             'limit':          limit,
             'offset':         offset,
+            'has_more':       (offset + limit) < total,
             'data':           [_serialize(r) for r in rows],
         }, 200

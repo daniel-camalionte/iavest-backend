@@ -93,7 +93,7 @@
     },
     {
       "name": "Performance",
-      "description": "Resultados históricos das IAs de trading — rota pública para landing page"
+      "description": "Resultados históricos das IAs de trading. Rotas públicas para landing page (/performance/mensal) e dashboard privado com JWT (/performance/dashboard, /performance/trades)."
     },
     {
       "name": "FAQ",
@@ -2064,6 +2064,261 @@
             }
           },
           "400": { "description": "Parâmetro id_market_analysis ausente ou inválido" }
+        }
+      }
+    },
+    "/performance/dashboard": {
+      "get": {
+        "tags": ["Performance"],
+        "summary": "Dashboard de performance do usuário (JWT)",
+        "description": "Retorna KPIs acumulados, breakdown mensal por estratégia e radar de assertividade da IA (resultado_direcao). Conta MT5 resolvida via JWT → metatrader_configs. Apenas trades com index_start, index_exit e profit_loss preenchidos são considerados.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "name": "account_number",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "Número da conta MT5. Default: primeira conta cadastrada do usuário."
+          },
+          {
+            "name": "estrategias",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "IDs de estratégias separados por vírgula (ex: 3,4). Sem filtro retorna todas.",
+            "example": "3,4"
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "default": "2026-01-01",
+            "description": "Data inicial do filtro (YYYY-MM-DD).",
+            "example": "2026-01-01"
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "Data final do filtro (YYYY-MM-DD). Default: hoje.",
+            "example": "2026-06-13"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dashboard retornado com sucesso",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success":        { "type": "boolean", "example": true },
+                "account_number": { "type": "string",  "example": "1001457239" },
+                "accounts":       { "type": "array", "items": { "type": "string" }, "example": ["1001457239"] },
+                "estrategias": {
+                  "type": "array",
+                  "description": "Estratégias com dados no período. Usar para montar o filtro de estratégias — exibir nome, enviar id.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id":   { "type": "integer", "example": 3 },
+                      "nome": { "type": "string",  "example": "Selene" }
+                    }
+                  },
+                  "example": [
+                    { "id": 3, "nome": "Selene" },
+                    { "id": 4, "nome": "Sirius" }
+                  ]
+                },
+                "date_from":      { "type": "string",  "example": "2026-01-01" },
+                "date_to":        { "type": "string",  "example": "2026-06-13" },
+                "kpis": {
+                  "type": "object",
+                  "properties": {
+                    "total_operacoes":     { "type": "integer", "example": 120 },
+                    "wins":                { "type": "integer", "example": 78 },
+                    "losses":              { "type": "integer", "example": 42 },
+                    "acerto_pct":          { "type": "number",  "example": 65.0 },
+                    "lucro_total":         { "type": "number",  "example": 3840.00 },
+                    "drawdown_maximo_pct": { "type": "number",  "example": -12.5 },
+                    "melhor_mes": {
+                      "type": "object",
+                      "properties": {
+                        "mes":   { "type": "string", "example": "Mar/26" },
+                        "ganho": { "type": "number", "example": 1200.00 }
+                      }
+                    },
+                    "pior_mes": {
+                      "type": "object",
+                      "properties": {
+                        "mes":   { "type": "string", "example": "Fev/26" },
+                        "ganho": { "type": "number", "example": -320.00 }
+                      }
+                    }
+                  }
+                },
+                "mensal": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "mes":               { "type": "string",  "example": "2026-03" },
+                      "mes_label":         { "type": "string",  "example": "Mar/26" },
+                      "ganho":             { "type": "number",  "example": 1200.00 },
+                      "operacoes":         { "type": "integer", "example": 22 },
+                      "wins":              { "type": "integer", "example": 15 },
+                      "losses":            { "type": "integer", "example": 7 },
+                      "capital_acumulado": { "type": "number",  "example": 2400.00 },
+                      "ias": {
+                        "type": "object",
+                        "description": "Resultado por estratégia. Chave = nome da estratégia (dinâmico).",
+                        "additionalProperties": {
+                          "type": "object",
+                          "properties": {
+                            "ganho":      { "type": "number",  "example": 800.00 },
+                            "operacoes":  { "type": "integer", "example": 12 },
+                            "wins":       { "type": "integer", "example": 8 },
+                            "losses":     { "type": "integer", "example": 4 },
+                            "acerto_pct": { "type": "number",  "example": 66.7 }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "radar_ia": {
+                  "type": "object",
+                  "nullable": true,
+                  "description": "Assertividade direcional dos sinais intraday (resultado_direcao). Null se sem dados no período.",
+                  "properties": {
+                    "total_sinais": { "type": "integer", "example": 48 },
+                    "favor":        { "type": "integer", "example": 30 },
+                    "contra":       { "type": "integer", "example": 12 },
+                    "neutro":       { "type": "integer", "example": 6 },
+                    "favor_pct":    { "type": "number",  "example": 62.5 },
+                    "contra_pct":   { "type": "number",  "example": 25.0 },
+                    "neutro_pct":   { "type": "number",  "example": 12.5 },
+                    "nota":         { "type": "string",  "example": "Sinais baseados em dados históricos — não influenciam as operações" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token inválido ou expirado" },
+          "404": { "description": "Nenhuma conta MT5 encontrada para este usuário" }
+        }
+      }
+    },
+    "/performance/trades": {
+      "get": {
+        "tags": ["Performance"],
+        "summary": "Lista paginada de trades do usuário (JWT)",
+        "description": "Retorna trades fechados com index_start, index_exit e profit_loss preenchidos, ordenados do mais recente para o mais antigo. Conta MT5 resolvida via JWT.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "name": "account_number",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "Número da conta MT5. Default: primeira conta cadastrada."
+          },
+          {
+            "name": "estrategias",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "IDs separados por vírgula (ex: 3,4).",
+            "example": "3,4"
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "default": "2026-01-01",
+            "example": "2026-01-01"
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "Data final (YYYY-MM-DD). Default: hoje.",
+            "example": "2026-06-13"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 20,
+            "description": "Registros por página (1–100)."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 0,
+            "description": "Registros a pular."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de trades retornada",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success":        { "type": "boolean", "example": true },
+                "account_number": { "type": "string",  "example": "1001457239" },
+                "date_from":      { "type": "string",  "example": "2026-01-01" },
+                "date_to":        { "type": "string",  "example": "2026-06-13" },
+                "total":          { "type": "integer", "example": 87, "description": "Total de trades no período (para paginação)" },
+                "limit":          { "type": "integer", "example": 20 },
+                "offset":         { "type": "integer", "example": 0 },
+                "has_more":       { "type": "boolean", "example": true, "description": "true enquanto houver mais páginas. Exibir botão 'Carregar mais' somente quando true." },
+                "data": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id_trade":                   { "type": "integer", "example": 42 },
+                      "id_estrategia":              { "type": "integer", "example": 3 },
+                      "estrategia_nome":            { "type": "string",  "example": "Selene" },
+                      "type":                       { "type": "string",  "enum": ["buy", "sell"], "example": "buy" },
+                      "index_start":                { "type": "integer", "example": 135420, "description": "Ponto de entrada do WIN (criado em created_at)" },
+                      "index_exit":                 { "type": "integer", "example": 135650, "description": "Ponto de saída do WIN (fechado em closed_at)" },
+                      "contract":                   { "type": "integer", "example": 1 },
+                      "operation":                  { "type": "string",  "enum": ["profit", "loss"], "example": "profit" },
+                      "profit_loss":                { "type": "number",  "example": 46.00, "description": "Ganho/perda total em R$" },
+                      "profit_loss_por_contrato":   { "type": "number",  "example": 46.00, "description": "profit_loss / contract" },
+                      "created_at":                 { "type": "string",  "example": "2026-03-15 09:32:00", "description": "Entrada na operação" },
+                      "closed_at":                  { "type": "string",  "example": "2026-03-15 10:14:00", "description": "Saída da operação" },
+                      "notes":                      { "type": "string",  "example": null }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token inválido ou expirado" },
+          "404": { "description": "Nenhuma conta MT5 encontrada" }
         }
       }
     },
