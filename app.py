@@ -9,6 +9,7 @@ from flask import Flask, jsonify, request
 from flask_restful import Api
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity
+from datetime import timedelta
 from flask_swagger_ui import get_swaggerui_blueprint
 from blacklist import BLACKLIST
 
@@ -19,7 +20,7 @@ import config.env as memory
 app = Flask(__name__)
 app.config["PROPAGATE_EXCEPTIONS"] = True
 app.config["JWT_SECRET_KEY"] = memory.jwt["JWT_SECRET_KEY"]
-app.config["JWT_ACCESS_TOKEN_EXPIRES"] = memory.jwt["JWT_ACCESS_TOKEN_EXPIRES"]
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(seconds=memory.jwt["JWT_ACCESS_TOKEN_EXPIRES"])
 app.config["JWT_BLACKLIST_ENABLED"] = True
 
 jwt = JWTManager(app)  
