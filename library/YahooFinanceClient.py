@@ -83,6 +83,7 @@ YAHOO_MACRO_SYMBOLS = {
     "dia":    {"symbol": "%5EDJI",    "raw": "^DJI",      "name": "Dow Jones (^DJI)"},
     "vxx":    {"symbol": "%5EVIX",    "raw": "^VIX",      "name": "VIX — Volatilidade (^VIX)"},
     "usdbrl": {"symbol": "BRL%3DX",   "raw": "BRL=X",     "name": "Dólar / Real (USD/BRL)"},
+    "uso":    {"symbol": "USO",       "raw": "USO",       "name": "US Oil Fund (USO) — proxy WTI"},
     "ewz":    {"symbol": "EWZ",       "raw": "EWZ",       "name": "Brasil ETF (EWZ) — proxy WIN"},
     "pbr":    {"symbol": "PBR",       "raw": "PBR",       "name": "Petrobras ADR (PBR)"},
     "vale":   {"symbol": "VALE",      "raw": "VALE",      "name": "Vale ADR (VALE)"},
