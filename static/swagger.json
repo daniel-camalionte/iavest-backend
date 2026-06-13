@@ -277,16 +277,22 @@
       "get": {
         "tags": ["Market Analysis"],
         "summary": "Análise de mercado com IA",
-        "description": "Coleta dados macroeconômicos (^GSPC, ^NDX, ^DJI, ES=F, NQ=F, BZ=F, ^VIX, BRL=X, DX-Y.NYB, EWZ, PBR, VALE) e indicadores técnicos do Ibovespa via Yahoo Finance, envia para o Claude Opus 4 e retorna recomendação de operação (COMPRA, VENDA ou INDEFINIÇÃO) com contratos ajustados ao score e VIX. Resultado é cacheado por TTL configurável (padrão 24h). A análise também é persistida na tabela analysis_market. Requer header Authorization com SCHEDULER_SECRET.",
+        "description": "Coleta dados macroeconômicos (^GSPC, ^NDX, ^DJI, ES=F, NQ=F, BZ=F, ^VIX, BRL=X, DX-Y.NYB, EWZ, PBR, VALE) e indicadores técnicos do Ibovespa via Yahoo Finance, envia para o Claude Opus 4 e retorna recomendação de operação (COMPRA, VENDA ou INDEFINIÇÃO) com contratos ajustados ao score e VIX. Resultado é cacheado por TTL configurável (padrão 24h). A análise também é persistida na tabela analysis_market. Autenticação via header X-Scheduler-Secret ou HTTP Basic Auth (password = SCHEDULER_SECRET).",
         "produces": ["application/json"],
         "parameters": [
           {
             "name": "X-Scheduler-Secret",
             "in": "header",
-            "required": true,
+            "required": false,
             "type": "string",
-            "description": "Hash fixa do scheduler (SCHEDULER_SECRET da env).",
-            "default": "3f8a9b0c1d2e4f5a6b7c8d9e0f1a2b3c"
+            "description": "SCHEDULER_SECRET da env. Alternativa ao Basic Auth."
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "type": "string",
+            "description": "HTTP Basic Auth — formato: Basic base64(user:SCHEDULER_SECRET). Aceito por cron jobs que não suportam headers customizados."
           },
           {
             "name": "id_ativos_base",
@@ -1939,19 +1945,25 @@
       }
     },
     "/market/intraday": {
-      "post": {
+      "get": {
         "tags": ["Intraday Analysis"],
         "summary": "Executar análise intraday WIN",
-        "description": "Busca candles do WIN via Yahoo Finance (^BVSP), volume via BOVA11, DOLFUT via BRL=X. Calcula RSI/MACD/EMA/ATR/S&R/EMA crossover em 15min e 5min, coleta níveis do dia anterior, Opening Range (persistido em analysis_intraday_or), macro atual (VIX, USD/BRL) e envia tudo para o Claude Haiku 4.5. Preços ajustados pelo basis WIN via custo de carrego (Selic BCB). Avalia resultado da análise anterior antes de salvar a nova. Requer análise fundamentalista do dia já executada. Persiste na tabela analysis_intraday e invalida o cache do GET /latest.",
+        "description": "Busca candles do WIN via Yahoo Finance (^BVSP), volume via BOVA11, DOLFUT via BRL=X. Calcula RSI/MACD/EMA/ATR/S&R/EMA crossover em 15min e 5min, coleta níveis do dia anterior, Opening Range (persistido em analysis_intraday_or), macro atual (VIX, USD/BRL) e envia tudo para o Claude Haiku 4.5. Preços ajustados pelo basis WIN via custo de carrego (Selic BCB). Avalia resultado da análise anterior antes de salvar a nova. Requer análise fundamentalista do dia já executada. Persiste na tabela analysis_intraday e invalida o cache do GET /latest. Autenticação via header X-Scheduler-Secret ou HTTP Basic Auth (password = SCHEDULER_SECRET).",
         "produces": ["application/json"],
         "parameters": [
           {
             "name": "X-Scheduler-Secret",
             "in": "header",
-            "required": true,
+            "required": false,
             "type": "string",
-            "description": "Hash fixa do scheduler (SCHEDULER_SECRET da env).",
-            "default": "3f8a9b0c1d2e4f5a6b7c8d9e0f1a2b3c"
+            "description": "SCHEDULER_SECRET da env. Alternativa ao Basic Auth."
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "type": "string",
+            "description": "HTTP Basic Auth — formato: Basic base64(user:SCHEDULER_SECRET). Aceito por cron jobs que não suportam headers customizados."
           },
           {
             "name": "id_ativos_base",
@@ -1975,7 +1987,7 @@
             "description": "Análise intraday gerada e salva com sucesso",
             "schema": { "$ref": "#/definitions/IntradayAnalysisResponse" }
           },
-          "401": { "description": "X-Scheduler-Secret inválido ou ausente" },
+          "401": { "description": "Autenticação inválida — X-Scheduler-Secret ou Basic Auth (password) incorretos" },
           "422": { "description": "Pregão fechado, análise duplicada ou análise fundamentalista do dia não executada" },
           "502": { "description": "Erro ao buscar candles do Yahoo Finance ou ao chamar o Claude Haiku" }
         }

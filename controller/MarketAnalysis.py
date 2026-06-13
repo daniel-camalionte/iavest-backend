@@ -168,7 +168,7 @@ class IntradayAnalyzeController(MethodView):
     Requer header Authorization: <SCHEDULER_SECRET>
     """
 
-    def post(self):
+    def get(self):
         auth_error = check_scheduler_auth()
         if auth_error:
             return auth_error
