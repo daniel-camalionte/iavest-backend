@@ -214,6 +214,40 @@ def _calculate_contracts(score: int, max_contracts: int, vix_level: str) -> int:
     return min(base, cap)
 
 
+def _round5(v):
+    """Arredonda para o tick do WIN (múltiplos de 5 pontos)."""
+    if v is None:
+        return None
+    return int(round(v / 5) * 5)
+
+
+def _enrich_daytrade_scenarios(scenarios: dict) -> dict:
+    """Arredonda preços para tick WIN e computa risco_pontos/risco_reais por cenário."""
+    if not scenarios:
+        return scenarios
+    result = {}
+    for name, s in scenarios.items():
+        if not isinstance(s, dict):
+            result[name] = s
+            continue
+        entrada    = _round5(s.get("entrada"))
+        stop_loss  = _round5(s.get("stop_loss"))
+        alvo_1     = _round5(s.get("alvo_1"))
+        alvo_2     = _round5(s.get("alvo_2"))
+        risco_pts  = abs(entrada - stop_loss) if entrada is not None and stop_loss is not None else None
+        risco_reais = round(risco_pts * 0.20, 2) if risco_pts is not None else None
+        result[name] = {
+            **s,
+            "entrada":      entrada,
+            "stop_loss":    stop_loss,
+            "alvo_1":       alvo_1,
+            "alvo_2":       alvo_2,
+            "risco_pontos": risco_pts,
+            "risco_reais":  risco_reais,
+        }
+    return result
+
+
 def _format_macro_for_prompt(macro: dict) -> str:
     lines = []
     for key, d in macro.items():
@@ -387,6 +421,15 @@ class BaseMarketAnalyzer(ABC):
 
         score_total = claude_result.get("score_total", 50)
         contracts   = _calculate_contracts(score_total, max_contracts, vix_lv)
+
+        # Post-process: tick WIN (múltiplos de 5) + risco_pontos/risco_reais por cenário
+        _dt = claude_result.get("daytrade_scenarios") or {}
+        if _dt:
+            claude_result["daytrade_scenarios"] = _enrich_daytrade_scenarios(_dt)
+        _ap = claude_result.get("activation_price") or {}
+        for _f in ("trigger", "buy_trigger", "sell_trigger"):
+            if _ap.get(_f) is not None:
+                _ap[_f] = _round5(_ap[_f])
         now_dt      = datetime.now(tz=BRASILIA)
 
         payload = {
