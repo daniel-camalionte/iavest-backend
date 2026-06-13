@@ -170,14 +170,15 @@ def _ema_crossover(candles_asc, fast=9, slow=21):
 
 
 def _avaliar_resultado(prev, candles_asc, now_br):
-    """Avalia se a análise anterior atingiu stop, alvo ou expirou."""
+    """Avalia se a análise anterior atingiu stop, alvo ou expirou.
+    Retorna (resultado, resultado_preco, resultado_direcao)."""
     direcao = prev.get("ai_direcao")
     stop    = prev.get("ai_stop_loss")
     alvo_1  = prev.get("ai_alvo_1")
     alvo_2  = prev.get("ai_alvo_2")
 
     if direcao == "neutro" or not stop or not alvo_1:
-        return "neutro", None
+        return "neutro", None, None
 
     prev_candle_at = prev.get("candle_datetime")
     if isinstance(prev_candle_at, str):
@@ -185,32 +186,42 @@ def _avaliar_resultado(prev, candles_asc, now_br):
     elif prev_candle_at:
         prev_dt = prev_candle_at if prev_candle_at.tzinfo else prev_candle_at.replace(tzinfo=BRASILIA)
     else:
-        return None, None
+        return None, None, None
 
     post_candles = [
         c for c in candles_asc
         if datetime.fromtimestamp(c["datetime"], tz=BRASILIA) > prev_dt
     ]
     if not post_candles:
-        return None, None
+        return None, None, None
 
     for c in post_candles:
         if direcao == "compra":
             if c["low"] <= stop:
-                return "stop_atingido", round(stop)
+                return "stop_atingido", round(stop), "contra"
             if alvo_2 and c["high"] >= alvo_2:
-                return "alvo_2_atingido", round(alvo_2)
+                return "alvo_2_atingido", round(alvo_2), "favor"
             if c["high"] >= alvo_1:
-                return "alvo_1_atingido", round(alvo_1)
+                return "alvo_1_atingido", round(alvo_1), "favor"
         elif direcao == "venda":
             if c["high"] >= stop:
-                return "stop_atingido", round(stop)
+                return "stop_atingido", round(stop), "contra"
             if alvo_2 and c["low"] <= alvo_2:
-                return "alvo_2_atingido", round(alvo_2)
+                return "alvo_2_atingido", round(alvo_2), "favor"
             if c["low"] <= alvo_1:
-                return "alvo_1_atingido", round(alvo_1)
+                return "alvo_1_atingido", round(alvo_1), "favor"
 
-    return "expirado", round(post_candles[-1]["close"])
+    last_close        = round(post_candles[-1]["close"])
+    win_price_inicial = prev.get("win_price")
+    if win_price_inicial is not None:
+        diff = last_close - int(win_price_inicial)
+        if direcao == "compra":
+            direcao_res = "favor" if diff > 0 else "contra" if diff < 0 else "neutro"
+        else:
+            direcao_res = "favor" if diff < 0 else "contra" if diff > 0 else "neutro"
+    else:
+        direcao_res = None
+    return "expirado", last_close, direcao_res
 
 
 def _tf_alinhamento(ema15, ema5):
@@ -380,12 +391,13 @@ class IntradayAnalysisRule:
         )
         if prev_rows and prev_rows[0].get("resultado") is None:
             prev_rec = prev_rows[0]
-            res_val, res_preco = _avaliar_resultado(prev_rec, candles, now_br)
+            res_val, res_preco, res_direcao = _avaliar_resultado(prev_rec, candles, now_br)
             if res_val:
                 IntradayAnalysisModel().update({
-                    "resultado":       res_val,
-                    "resultado_preco": res_preco,
-                    "resultado_at":    now_br.strftime("%Y-%m-%d %H:%M:%S"),
+                    "resultado":          res_val,
+                    "resultado_preco":    res_preco,
+                    "resultado_at":       now_br.strftime("%Y-%m-%d %H:%M:%S"),
+                    "resultado_direcao":  res_direcao,
                 }, prev_rec.get("id_intraday_analysis"))
 
         # 3. Indicadores + níveis do dia
@@ -677,9 +689,10 @@ class IntradayAnalysisRule:
         _intraday_cache.clear()
 
         result = dict(save_data)
-        result["resultado"]       = None
-        result["resultado_preco"] = None
-        result["resultado_at"]    = None
+        result["resultado"]          = None
+        result["resultado_preco"]    = None
+        result["resultado_at"]       = None
+        result["resultado_direcao"]  = None
         result.pop("payload_json", None)
         for field in ("ai_confluencias", "ai_riscos"):
             val = result.get(field)

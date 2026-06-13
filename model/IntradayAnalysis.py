@@ -77,6 +77,7 @@ class IntradayAnalysisModel(BaseModel):
             "resultado":            "resultado",
             "resultado_preco":      "resultado_preco",
             "resultado_at":         "resultado_at",
+            "resultado_direcao":    "resultado_direcao",
             "payload_json":         "payload_json",
 
             "created_at":           "created_at",
