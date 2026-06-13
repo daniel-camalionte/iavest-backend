@@ -139,6 +139,10 @@ api.add_resource(appController.FaqCacheClearController, '/faq/cache')
 api.add_resource(appController.TradePerformanceMensalController, '/performance/mensal')
 api.add_resource(appController.TradePerformanceCacheClearController, '/performance/cache')
 
+#Performance Dashboard (JWT)
+api.add_resource(appController.PerformanceDashboardController, '/performance/dashboard')
+api.add_resource(appController.PerformanceTradesController, '/performance/trades')
+
 #Market Analysis
 api.add_resource(appController.MarketAnalysisPingController, '/market/ping')
 api.add_resource(appController.MarketAnalyzeController, '/market/analyze')

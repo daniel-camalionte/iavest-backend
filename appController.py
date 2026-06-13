@@ -21,5 +21,6 @@ from controller.Chat import ChatController
 from controller.MarketAnalysis import MarketAnalysisPingController, MarketAnalyzeController, MarketCacheClearController, MarketDebugController, MarketAnalysisListController, MarketAnalysisDetailController, IntradayAnalyzeController, IntradayAnalysisLatestController, IntradayAnalysisListController
 from controller.TermoAceite import TermoAceiteController
 from controller.TradePerformance import TradePerformanceMensalController, TradePerformanceCacheClearController
+from controller.PerformanceDashboard import PerformanceDashboardController, PerformanceTradesController
 from controller.Faq import FaqListController, FaqCacheClearController
 
