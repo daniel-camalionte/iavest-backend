@@ -3,7 +3,7 @@ import json
 import ssl
 import urllib.request
 import urllib.parse
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime as _dt
 
 try:
     import certifi
@@ -90,6 +90,7 @@ YAHOO_MACRO_SYMBOLS = {
 }
 YAHOO_QUOTE_URL    = "https://query1.finance.yahoo.com/v8/finance/chart/{}?interval=1d&range=5d"
 YAHOO_INTRADAY_URL  = "https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?interval={interval}&range=5d"
+YAHOO_INTRADAY_DATE_URL = "https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?interval={interval}&period1={p1}&period2={p2}"
 YAHOO_FX_INTRADAY_URL    = "https://query1.finance.yahoo.com/v8/finance/chart/BRL%3DX?interval={interval}&range=1d"
 YAHOO_BOVA11_INTRADAY_URL = "https://query1.finance.yahoo.com/v8/finance/chart/BOVA11.SA?interval={interval}&range=5d"
 
@@ -566,6 +567,68 @@ class YahooFinanceClient:
 
             if not candles:
                 return None, "Nenhum candle retornado"
+
+            return candles, None
+        except (KeyError, IndexError, TypeError) as e:
+            return None, str(e)
+
+    def get_ibov_candles_for_date(self, date_str, interval="15m"):
+        """Retorna candles do ^BVSP para uma data específica (YYYY-MM-DD), convertidos para WIN."""
+        # B3: sessão 09:00–18:00 BRT = 12:00–21:00 UTC
+        try:
+            d = _dt.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            return None, "date_str inválido"
+
+        import calendar
+        p1 = int(calendar.timegm(d.replace(hour=12, minute=0,  second=0).timetuple()))
+        p2 = int(calendar.timegm(d.replace(hour=21, minute=0,  second=0).timetuple()))
+
+        ref_date = d.date()
+        url = YAHOO_INTRADAY_DATE_URL.format(interval=interval, p1=p1, p2=p2)
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+        })
+        try:
+            response = urllib.request.urlopen(req, timeout=20, context=_SSL_CTX)
+            data = json.loads(response.read().decode("utf-8"))
+        except Exception as e:
+            return None, str(e)
+
+        try:
+            result     = data["chart"]["result"][0]
+            timestamps = result.get("timestamp", [])
+            quotes     = result["indicators"]["quote"][0]
+
+            closes  = quotes.get("close",  [])
+            highs   = quotes.get("high",   [])
+            lows    = quotes.get("low",    [])
+            opens   = quotes.get("open",   [])
+            volumes = quotes.get("volume", [])
+
+            candles = []
+            for i, ts in enumerate(timestamps):
+                c = closes[i]  if i < len(closes)  else None
+                h = highs[i]   if i < len(highs)   else None
+                l = lows[i]    if i < len(lows)     else None
+                o = opens[i]   if i < len(opens)   else None
+                v = volumes[i] if i < len(volumes) else None
+
+                if c is None or h is None or l is None:
+                    continue
+
+                candles.append({
+                    "time":   ts,
+                    "open":   ibov_to_win(o if o else c, ref_date),
+                    "high":   ibov_to_win(h, ref_date),
+                    "low":    ibov_to_win(l, ref_date),
+                    "close":  ibov_to_win(c, ref_date),
+                    "volume": int(v) if v else 0,
+                })
+
+            if not candles:
+                return None, "Nenhum candle retornado para a data"
 
             return candles, None
         except (KeyError, IndexError, TypeError) as e:

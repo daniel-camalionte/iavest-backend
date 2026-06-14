@@ -67,6 +67,7 @@ api.add_resource(appController.LogoutController, '/logout')
 api.add_resource(appController.SendCodeController, '/auth/send-code')
 api.add_resource(appController.VerifyCodeController, '/auth/verify-code')
 api.add_resource(appController.CompleteRegistrationController, '/auth/complete-registration')
+api.add_resource(appController.AuthGoogleController, '/auth/google')
 
 #Metatrader Login
 api.add_resource(appController.MetatraderLoginController, '/metatrader/login')
@@ -143,6 +144,7 @@ api.add_resource(appController.TradePerformanceCacheClearController, '/performan
 #Performance Dashboard (JWT)
 api.add_resource(appController.PerformanceDashboardController, '/performance/dashboard')
 api.add_resource(appController.PerformanceTradesController, '/performance/trades')
+api.add_resource(appController.TradeCandlesController, '/performance/trade-candles')
 
 #Market Analysis
 api.add_resource(appController.MarketAnalysisPingController, '/market/ping')

@@ -121,3 +121,8 @@ intraday = {
 ticket = {
     "SUPPORT_EMAILS": os.environ.get("TICKET_SUPPORT_EMAILS", "dcamalionte@gmail.com")
 }
+
+# GOOGLE AUTH
+google = {
+    "CLIENT_ID": os.environ.get("GOOGLE_CLIENT_ID", "")
+}

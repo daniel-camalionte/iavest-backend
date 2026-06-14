@@ -852,6 +852,70 @@
         }
       }
     },
+    "/auth/google": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login com Google",
+        "description": "Autentica o usuario com o id_token obtido pelo Google Sign-In no frontend. Se o email ja existir na base, faz login direto. Se for novo usuario, cria a conta com nome do perfil Google e inicia trial. Retorna JWT e requires_registration: true se ainda faltar completar o perfil (CPF/telefone).",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["id_token"],
+              "properties": {
+                "id_token": {
+                  "type": "string",
+                  "description": "id_token retornado pelo Google Sign-In"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Login realizado com sucesso",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": true },
+                "message": { "type": "string", "example": "Login realizado com sucesso" },
+                "token": { "type": "string", "description": "JWT de acesso (ou temp_registration se requires_registration=true)" },
+                "requires_registration": { "type": "boolean", "description": "true se perfil incompleto (CPF/telefone em falta)" },
+                "user": {
+                  "type": "object",
+                  "description": "Presente somente quando requires_registration=false",
+                  "properties": {
+                    "id_usuario": { "type": "integer" },
+                    "email": { "type": "string" },
+                    "nome": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "id_token ausente ou email nao disponivel"
+          },
+          "401": {
+            "description": "Token Google invalido"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
     "/planos": {
       "get": {
         "tags": [
@@ -2319,6 +2383,108 @@
           },
           "401": { "description": "Token inválido ou expirado" },
           "404": { "description": "Nenhuma conta MT5 encontrada" }
+        }
+      }
+    },
+    "/performance/trade-candles": {
+      "get": {
+        "tags": ["Performance"],
+        "summary": "Candles + marcadores de entrada/saída de um trade (JWT)",
+        "description": "Retorna os candles de 15min do WIN para o dia do trade e os marcadores de entrada/saída prontos para o Lightweight Charts. Candles ajustados pelo basis WIN via ibov_to_win(). O trade deve pertencer ao usuário autenticado.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "name": "id_trade",
+            "in": "query",
+            "required": true,
+            "type": "integer",
+            "description": "ID do trade",
+            "example": 42
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Candles e marcadores retornados com sucesso",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": true },
+                "trade": {
+                  "type": "object",
+                  "properties": {
+                    "id_trade":        { "type": "integer", "example": 42 },
+                    "estrategia_nome": { "type": "string",  "example": "Selene" },
+                    "type":            { "type": "string",  "enum": ["buy", "sell"], "example": "buy" },
+                    "operation":       { "type": "string",  "enum": ["profit", "loss"], "example": "profit" },
+                    "index_start":     { "type": "integer", "example": 135420, "description": "Preço de entrada WIN" },
+                    "index_exit":      { "type": "integer", "example": 135650, "description": "Preço de saída WIN" },
+                    "contract":        { "type": "integer", "example": 1 },
+                    "profit_loss":     { "type": "number",  "example": 46.00 },
+                    "created_at":      { "type": "string",  "example": "2026-03-15 09:32:00" },
+                    "closed_at":       { "type": "string",  "example": "2026-03-15 10:14:00" }
+                  }
+                },
+                "markers": {
+                  "type": "array",
+                  "description": "Marcadores prontos para o Lightweight Charts (createSeriesMarkers)",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "time":     { "type": "integer", "example": 1742028720, "description": "Unix timestamp UTC" },
+                      "type":     { "type": "string",  "enum": ["entry", "exit"] },
+                      "price":    { "type": "integer", "example": 135420 },
+                      "color":    { "type": "string",  "example": "#26a69a" },
+                      "position": { "type": "string",  "enum": ["belowBar", "aboveBar"] },
+                      "shape":    { "type": "string",  "enum": ["arrowUp", "arrowDown"] },
+                      "label":    { "type": "string",  "example": "E" },
+                      "text":     { "type": "string",  "example": "Entrada Compra — 135.420" }
+                    }
+                  }
+                },
+                "candles": {
+                  "type": "array",
+                  "description": "Candles 15min do dia, ajustados pelo basis WIN. Prontos para setData() do Lightweight Charts.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "time":   { "type": "integer", "example": 1742025600, "description": "Unix timestamp UTC" },
+                      "open":   { "type": "integer", "example": 135100 },
+                      "high":   { "type": "integer", "example": 135500 },
+                      "low":    { "type": "integer", "example": 135000 },
+                      "close":  { "type": "integer", "example": 135420 },
+                      "volume": { "type": "integer", "example": 0 }
+                    }
+                  }
+                },
+                "indicadores": {
+                  "type": "object",
+                  "nullable": true,
+                  "description": "Indicadores técnicos calculados no candle de entrada. Null se candles insuficientes.",
+                  "properties": {
+                    "rsi":            { "type": "number",  "example": 58.4 },
+                    "rsi_label":      { "type": "string",  "example": "Levemente comprado" },
+                    "ema9":           { "type": "number",  "example": 135380 },
+                    "ema21":          { "type": "number",  "example": 135210 },
+                    "ema_label":      { "type": "string",  "example": "EMA9 acima da EMA21 — tendência de alta" },
+                    "macd_histogram": { "type": "number",  "example": 23.1 },
+                    "macd_label":     { "type": "string",  "example": "Histograma positivo — momentum de alta" },
+                    "nota":           { "type": "string",  "example": "Indicadores calculados no candle de entrada — contexto técnico, não a lógica interna do robô." }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "id_trade ausente ou inválido" },
+          "401": { "description": "Token inválido ou expirado" },
+          "404": { "description": "Trade não encontrado ou não pertence ao usuário" },
+          "502": { "description": "Erro ao buscar candles do Yahoo Finance" }
         }
       }
     },
