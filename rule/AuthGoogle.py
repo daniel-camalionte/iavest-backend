@@ -41,6 +41,7 @@ class AuthGoogleRule:
                 "email":            email,
                 "nome":             nome,
                 "validacao_email":  1,
+                "auth_provider":    "google",
                 "created_at":       now,
                 "updated_at":       now,
             })
@@ -59,6 +60,10 @@ class AuthGoogleRule:
 
         usuario = usuario_data[0]
         id_usuario = usuario["id_usuario"]
+
+        if not is_new and usuario.get("auth_provider") != "google":
+            UsuarioModel().update({"auth_provider": "google", "updated_at": now}, id_usuario)
+
         requires_registration = not usuario.get("cpf_cnpj")
 
         token_data = {"id_usuario": id_usuario, "email": email}

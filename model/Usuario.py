@@ -24,6 +24,7 @@ class UsuarioModel(BaseModel):
                     "hash_at": 'hash_at',
                     "validacao_email": 'validacao_email',
                     "status": 'status',
+                    "auth_provider": 'auth_provider',
                     "created_at": 'created_at',
                     "updated_at": 'updated_at'
                 }
