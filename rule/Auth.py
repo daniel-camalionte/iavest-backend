@@ -142,8 +142,9 @@ class AuthRule():
         id_usuario = identity.get("id_usuario")
         email_token = identity.get("email")
 
-        # Validar se email do body corresponde ao do token
-        if data.get("email") != email_token:
+        # Se email vier no body, valida correspondência; caso contrário usa o do token
+        email_body = data.get("email")
+        if email_body and email_body != email_token:
             return {"success": False, "message": "Email não corresponde ao token"}, 400
 
         nome = data.get("nome")
