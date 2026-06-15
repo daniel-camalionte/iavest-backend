@@ -376,9 +376,14 @@ class YahooFinanceClient:
             if prev_close and open_today and prev_close != 0:
                 gap_pct = round((open_today - prev_close) / prev_close * 100, 2)
 
+            price_now  = round(closes_desc[0], 2)
+            prev_close_val = round(prev_close, 2) if prev_close else None
+            pct_change = round((price_now - prev_close_val) / prev_close_val * 100, 4) if prev_close_val else None
+
             return {
-                "price":           round(closes_desc[0], 2),
-                "prev_close":      round(prev_close, 2) if prev_close else None,
+                "price":           price_now,
+                "prev_close":      prev_close_val,
+                "percent_change":  pct_change,
                 "prev_high":       round(prev_high, 2)  if prev_high  else None,
                 "prev_low":        round(prev_low, 2)   if prev_low   else None,
                 "opening_gap_pct": gap_pct,

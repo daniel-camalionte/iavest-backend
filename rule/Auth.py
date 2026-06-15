@@ -142,7 +142,7 @@ class AuthRule():
         id_usuario = identity.get("id_usuario")
         email_token = identity.get("email")
 
-        # Se email vier no body, valida correspondência; caso contrário usa o do token
+        # Se email vier no body, valida correspondência; caso contrário usa o do token (fluxo Google)
         email_body = data.get("email")
         if email_body and email_body != email_token:
             return {"success": False, "message": "Email não corresponde ao token"}, 400
@@ -200,7 +200,7 @@ class AuthRule():
             "message": "Cadastro concluído com sucesso",
             "token": token,
             "user": {
-                "id": usuario["id_usuario"],
+                "id_usuario": usuario["id_usuario"],
                 "nome": usuario["nome"],
                 "email": usuario["email"],
                 "cpf_cnpj": usuario.get("cpf_cnpj"),

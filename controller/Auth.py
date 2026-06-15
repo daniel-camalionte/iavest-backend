@@ -75,16 +75,17 @@ class CompleteRegistrationController(MethodView):
             if not get_json:
                 return {"success": False, "message": "Dados inválidos"}, 400
 
-            # Validar campos obrigatórios
-            required_fields = ["nome", "email", "cpf_cnpj", "ddd", "telefone"]
+            # Validar campos obrigatórios (email opcional — pode vir do JWT no fluxo Google)
+            required_fields = ["nome", "cpf_cnpj", "ddd", "telefone"]
             for field in required_fields:
                 if not get_json.get(field):
                     return {"success": False, "message": f"Campo {field} é obrigatório"}, 400
 
             email = get_json.get("email")
-            email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-            if not re.match(email_regex, email):
-                return {"success": False, "message": "Email inválido"}, 400
+            if email:
+                email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+                if not re.match(email_regex, email):
+                    return {"success": False, "message": "Email inválido"}, 400
 
             cpf = re.sub(r'\D', '', get_json.get("cpf_cnpj", ""))
             if not _validar_cpf(cpf):
