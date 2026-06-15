@@ -97,6 +97,8 @@ class MarketAnalysisModel(BaseModel):
             "mc_nq1_pct":          "mc_nq1_pct",
             "mc_uso_price":        "mc_uso_price",
             "mc_uso_pct":          "mc_uso_pct",
+            "mc_bz_price":         "mc_bz_price",
+            "mc_bz_pct":           "mc_bz_pct",
             "mc_vxx_price":        "mc_vxx_price",
             "mc_vxx_pct":          "mc_vxx_pct",
             "mc_vxx_level":        "mc_vxx_level",

@@ -562,6 +562,8 @@ class BaseMarketAnalyzer(ABC):
                 "mc_nq1_pct":          _mc("nq1",    "percent_change"),
                 "mc_uso_price":        _mc("uso",    "price"),
                 "mc_uso_pct":          _mc("uso",    "percent_change"),
+                "mc_bz_price":         _mc("bz",     "price"),
+                "mc_bz_pct":           _mc("bz",     "percent_change"),
                 "mc_vxx_price":        _mc("vxx",    "price"),
                 "mc_vxx_pct":          _mc("vxx",    "percent_change"),
                 "mc_vxx_level":        _mc("vxx",    "vix_level"),
