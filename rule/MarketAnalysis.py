@@ -327,7 +327,7 @@ def _call_claude(macro: dict, technical: dict, system_prompt: str):
             "content-type":      "application/json",
         },
         payload={
-            "model":      "claude-opus-4-5",
+            "model":      "claude-opus-4-8",
             "max_tokens": 2048,
             "system":     system_prompt,
             "messages":   [{"role": "user", "content": user_content}],

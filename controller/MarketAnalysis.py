@@ -24,7 +24,7 @@ class MarketAnalysisPingController(MethodView):
                 "content-type":      "application/json",
             },
             payload={
-                "model":      "claude-opus-4-5",
+                "model":      "claude-opus-4-8",
                 "max_tokens": 50,
                 "messages":   [{"role": "user", "content": "Responda apenas: OK"}],
             },
