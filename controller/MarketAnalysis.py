@@ -3,7 +3,7 @@ from flask.views import MethodView
 from flask_jwt_extended import jwt_required
 
 from rule.MarketAnalysis import MarketAnalysisRule, MarketAnalysisListRule, MarketAnalysisDetailRule
-from rule.IntradayAnalysis import IntradayAnalysisRule, IntradayAnalysisLatestRule, IntradayAnalysisListRule
+from rule.IntradayAnalysis import IntradayAnalysisRule, IntradayAnalysisLatestRule, IntradayAnalysisListRule, IntradayHealthRule
 from library.YahooFinanceClient import YahooFinanceClient
 from library.HttpClient import HttpClient
 from library.SchedulerAuth import check_scheduler_auth
@@ -211,6 +211,29 @@ class IntradayResolvePendingController(MethodView):
             return {"error": "Parâmetro 'id_ativos_base' deve ser um número inteiro"}, 400
 
         return IntradayAnalysisRule.resolve_pending(id_ativos_base=id_ativos_base)
+
+
+class IntradayHealthController(MethodView):
+    """
+    GET /market/intraday/health?id_ativos_base=1
+
+    Monitoramento do pipeline intraday (fundamental do dia, frescor do MT5,
+    sinais saindo, resolução em dia). Grava em intraday_health_log quando há
+    problema. Pensado para rodar via scheduler a cada ~15min.
+    Requer header Authorization: <SCHEDULER_SECRET>
+    """
+
+    def get(self):
+        auth_error = check_scheduler_auth()
+        if auth_error:
+            return auth_error
+
+        try:
+            id_ativos_base = int(request.args.get("id_ativos_base", 1))
+        except (TypeError, ValueError):
+            return {"error": "Parâmetro 'id_ativos_base' deve ser um número inteiro"}, 400
+
+        return IntradayHealthRule.check(id_ativos_base=id_ativos_base)
 
 
 class IntradayAnalysisLatestController(MethodView):

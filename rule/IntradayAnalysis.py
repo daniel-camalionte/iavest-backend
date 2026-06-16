@@ -9,11 +9,20 @@ from model.IntradayAnalysis import IntradayAnalysisModel
 from model.IntradayOR import IntradayORModel
 from model.MarketAnalysis import MarketAnalysisModel
 from model.Mt5Candles import Mt5CandlesModel
+from model.IntradayHealthLog import IntradayHealthLogModel
 
 BRASILIA = timezone(timedelta(hours=-3))
 
 _intraday_cache = {}
 _CACHE_TTL = 300  # 5 minutos
+
+# Mapa id_ativos_base -> id_symbols (mt5_candles). 1 = WIN.
+_ATIVO_SYMBOL = {1: 1}
+
+# Thresholds do health check (minutos)
+_HEALTH_MT5_WARN_MIN  = 8    # MT5 atrasado
+_HEALTH_MT5_CRIT_MIN  = 15   # MT5 parado (análise usa dado velho ou falha)
+_HEALTH_SINAL_WARN_MIN = 25  # sem sinal novo há muito tempo
 
 # Filtro de exaustão — valida rompimento por convicção (volume + momentum).
 # Rompimento de baixa com volume fraco e MACD histograma divergente costuma falhar.
@@ -931,3 +940,119 @@ class IntradayAnalysisListRule:
             "limit":  limit,
             "offset": offset,
         }, 200
+
+
+def _sev_max(a, b):
+    """Retorna a maior severidade entre dois níveis."""
+    ordem = {"ok": 0, "idle": 0, "warning": 1, "critical": 2}
+    return a if ordem.get(a, 0) >= ordem.get(b, 0) else b
+
+
+class IntradayHealthRule:
+    """Monitoramento do pipeline intraday — não avalia qualidade do sinal,
+    só verifica se a infraestrutura está viva (fundamental do dia, frescor do
+    MT5, sinais saindo, resolução em dia). Grava em intraday_health_log quando
+    detecta problema, para debug posterior. Pensado para rodar via scheduler."""
+
+    @staticmethod
+    def check(id_ativos_base=1):
+        from library.MySql import MySql
+
+        now_br  = datetime.now(BRASILIA)
+        aberto  = _is_b3_open(now_br)
+        symbol  = _ATIVO_SYMBOL.get(id_ativos_base, id_ativos_base)
+        hhmm    = now_br.hour * 100 + now_br.minute
+
+        # Um round-trip: diffs de tempo calculados no SQL (NOW() do servidor = BRT).
+        sql = """
+            SELECT
+              (SELECT id_market_analysis FROM analysis_market
+                 WHERE id_ativos_base=%s AND DATE(analyzed_at)=CURDATE()
+                 ORDER BY analyzed_at DESC LIMIT 1)                            AS fundamental_id,
+              (SELECT MAX(`datetime`) FROM mt5_candles WHERE id_symbols=%s)    AS mt5_ultimo_candle,
+              (SELECT TIMESTAMPDIFF(MINUTE, MAX(`datetime`), NOW())
+                 FROM mt5_candles WHERE id_symbols=%s)                         AS mt5_atraso_min,
+              (SELECT MAX(analyzed_at) FROM analysis_intraday
+                 WHERE id_ativos_base=%s AND DATE(analyzed_at)=CURDATE())      AS ultimo_sinal_at,
+              (SELECT TIMESTAMPDIFF(MINUTE, MAX(analyzed_at), NOW())
+                 FROM analysis_intraday
+                 WHERE id_ativos_base=%s AND DATE(analyzed_at)=CURDATE())      AS ultimo_sinal_ha_min,
+              (SELECT COUNT(*) FROM analysis_intraday
+                 WHERE id_ativos_base=%s AND resultado IS NULL
+                   AND ai_direcao<>'neutro' AND DATE(candle_datetime) < CURDATE()) AS pendencias_qtd,
+              (SELECT COUNT(*) FROM analysis_intraday
+                 WHERE id_ativos_base=%s AND DATE(candle_datetime)=CURDATE())  AS sinais_hoje_qtd
+        """
+        params = (id_ativos_base, symbol, symbol, id_ativos_base,
+                  id_ativos_base, id_ativos_base, id_ativos_base)
+        rows = MySql().fetch(sql, params) or [{}]
+        r = rows[0]
+
+        fundamental_id      = r.get("fundamental_id")
+        fundamental_ok      = fundamental_id is not None
+        mt5_ultimo_candle   = r.get("mt5_ultimo_candle")
+        mt5_atraso_min      = r.get("mt5_atraso_min")
+        ultimo_sinal_at     = r.get("ultimo_sinal_at")
+        ultimo_sinal_ha_min = r.get("ultimo_sinal_ha_min")
+        pendencias_qtd      = int(r.get("pendencias_qtd") or 0)
+        sinais_hoje_qtd     = int(r.get("sinais_hoje_qtd") or 0)
+
+        falhas = []
+        status = "ok" if aberto else "idle"
+
+        if aberto:
+            if not fundamental_ok:
+                falhas.append("fundamental_ausente")
+                status = _sev_max(status, "critical")
+            if mt5_atraso_min is None or mt5_atraso_min > _HEALTH_MT5_CRIT_MIN:
+                falhas.append("mt5_parado")
+                status = _sev_max(status, "critical")
+            elif mt5_atraso_min > _HEALTH_MT5_WARN_MIN:
+                falhas.append("mt5_atrasado")
+                status = _sev_max(status, "warning")
+            # sinais só são esperados a partir de ~09:05; só cobra depois de 09:35
+            if hhmm >= 935 and (ultimo_sinal_ha_min is None or ultimo_sinal_ha_min > _HEALTH_SINAL_WARN_MIN):
+                falhas.append("sem_sinal_recente")
+                status = _sev_max(status, "warning")
+            if pendencias_qtd > 0:
+                falhas.append("pendencias_nao_resolvidas")
+                status = _sev_max(status, "warning")
+
+        result = {
+            "status":        status,
+            "pregao_aberto": aberto,
+            "checked_at":    now_br.strftime("%Y-%m-%d %H:%M:%S"),
+            "falhas":        falhas,
+            "checks": {
+                "fundamental":  {"ok": fundamental_ok, "id": fundamental_id},
+                "mt5":          {"ultimo_candle": str(mt5_ultimo_candle) if mt5_ultimo_candle else None,
+                                 "atraso_min": mt5_atraso_min},
+                "ultimo_sinal": {"at": str(ultimo_sinal_at) if ultimo_sinal_at else None,
+                                 "ha_min": ultimo_sinal_ha_min},
+                "pendencias":   {"qtd": pendencias_qtd},
+                "sinais_hoje":  {"qtd": sinais_hoje_qtd},
+            },
+        }
+
+        # Loga só quando há problema — mantém a tabela limpa para debug.
+        if status in ("warning", "critical"):
+            try:
+                IntradayHealthLogModel().save({
+                    "checked_at":          now_br.strftime("%Y-%m-%d %H:%M:%S"),
+                    "id_ativos_base":      id_ativos_base,
+                    "status":              status,
+                    "pregao_aberto":       1 if aberto else 0,
+                    "falhas":              ",".join(falhas),
+                    "fundamental_ok":      1 if fundamental_ok else 0,
+                    "mt5_ultimo_candle":   mt5_ultimo_candle.strftime("%Y-%m-%d %H:%M:%S") if mt5_ultimo_candle else None,
+                    "mt5_atraso_min":      mt5_atraso_min,
+                    "ultimo_sinal_at":     ultimo_sinal_at.strftime("%Y-%m-%d %H:%M:%S") if ultimo_sinal_at else None,
+                    "ultimo_sinal_ha_min": ultimo_sinal_ha_min,
+                    "pendencias_qtd":      pendencias_qtd,
+                    "sinais_hoje_qtd":     sinais_hoje_qtd,
+                    "detalhe_json":        json.dumps(result, ensure_ascii=False),
+                })
+            except Exception:
+                pass  # falha no log não pode derrubar o monitoramento
+
+        return result, 200
