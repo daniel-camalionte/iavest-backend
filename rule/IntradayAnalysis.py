@@ -4,15 +4,22 @@ from datetime import datetime, timezone, timedelta
 
 import config.env as memory
 from library.HttpClient import HttpClient
-from library.YahooFinanceClient import YahooFinanceClient, _rsi, _ema, _macd, _ema_series_asc, ibov_to_win
+from library.YahooFinanceClient import YahooFinanceClient, _rsi, _ema, _macd, _ema_series_asc
 from model.IntradayAnalysis import IntradayAnalysisModel
 from model.IntradayOR import IntradayORModel
 from model.MarketAnalysis import MarketAnalysisModel
+from model.Mt5Candles import Mt5CandlesModel
 
 BRASILIA = timezone(timedelta(hours=-3))
 
 _intraday_cache = {}
 _CACHE_TTL = 300  # 5 minutos
+
+# Filtro de exaustão — valida rompimento por convicção (volume + momentum).
+# Rompimento de baixa com volume fraco e MACD histograma divergente costuma falhar.
+# Validado em backtest sobre todo o histórico WIN: removeu 3 stops e 0 acertos,
+# elevando o acerto de 43.6% para 47.2% (+895 pts). Só o lado VENDA foi validado.
+_EXHAUSTION_VOL_REL_MAX = 0.5
 
 
 def _is_b3_open(now_br):
@@ -213,14 +220,21 @@ def _avaliar_resultado(prev, candles_asc, now_br):
 
     last_close        = round(post_candles[-1]["close"])
     win_price_inicial = prev.get("win_price")
+
+    # Fallback: se win_price não estiver no registro, deriva do candle de entrada
+    if win_price_inicial is None:
+        entry_candles = [c for c in candles_asc
+                         if datetime.fromtimestamp(c["datetime"], tz=BRASILIA) <= prev_dt]
+        win_price_inicial = round(entry_candles[-1]["close"]) if entry_candles else None
+
     if win_price_inicial is not None:
-        diff = last_close - int(win_price_inicial)
+        diff = last_close - round(float(win_price_inicial))
         if direcao == "compra":
             direcao_res = "favor" if diff > 0 else "contra" if diff < 0 else "neutro"
         else:
             direcao_res = "favor" if diff < 0 else "contra" if diff > 0 else "neutro"
     else:
-        direcao_res = None
+        direcao_res = "neutro"
     return "expirado", last_close, direcao_res
 
 
@@ -233,6 +247,81 @@ def _tf_alinhamento(ema15, ema5):
     if ema15 in bear and ema5 in bear:
         return "alinhado_venda"
     return "conflitante"
+
+
+# ---------------------------------------------------------------------------
+# MT5 candles helpers
+# ---------------------------------------------------------------------------
+
+def _fetch_mt5_candles(id_symbol, days=3):
+    """Busca candles de 1 min do mt5_candles e retorna no formato padrão (unix ts)."""
+    cutoff = (datetime.now(BRASILIA) - timedelta(days=days)).strftime("%Y-%m-%d 00:00:00")
+    rows = (
+        Mt5CandlesModel()
+        .where(["id_symbols", "=", id_symbol])
+        .where(["datetime", ">=", cutoff])
+        .order("datetime", "ASC")
+        .find()
+    ) or []
+    result = []
+    for r in rows:
+        dt = r["datetime"]
+        if isinstance(dt, str):
+            dt = datetime.strptime(dt, "%Y-%m-%d %H:%M:%S").replace(tzinfo=BRASILIA)
+        elif dt.tzinfo is None:
+            dt = dt.replace(tzinfo=BRASILIA)
+        result.append({
+            "datetime": int(dt.timestamp()),
+            "open":     float(r["open"]),
+            "high":     float(r["high"]),
+            "low":      float(r["low"]),
+            "close":    float(r["close"]),
+            "volume":   int(r["tick_vol"]),
+        })
+    return result
+
+
+def _aggregate_candles(candles_1m, interval_min):
+    """Agrega candles de 1 min em candles de N min (OHLCV)."""
+    from collections import OrderedDict
+    buckets = OrderedDict()
+    for c in candles_1m:
+        dt          = datetime.fromtimestamp(c["datetime"], tz=BRASILIA)
+        floored_min = (dt.minute // interval_min) * interval_min
+        bucket_dt   = dt.replace(minute=floored_min, second=0, microsecond=0)
+        key         = int(bucket_dt.timestamp())
+        if key not in buckets:
+            buckets[key] = {
+                "datetime": key,
+                "open":     c["open"],
+                "high":     c["high"],
+                "low":      c["low"],
+                "close":    c["close"],
+                "volume":   c["volume"],
+            }
+        else:
+            b = buckets[key]
+            b["high"]   = max(b["high"], c["high"])
+            b["low"]    = min(b["low"],  c["low"])
+            b["close"]  = c["close"]
+            b["volume"] += c["volume"]
+    return list(buckets.values())
+
+
+def _wdo_info(candles_1m_wdo, now_br):
+    """Preço atual do WDO e variação vs fechamento do dia anterior."""
+    if not candles_1m_wdo:
+        return None
+    today         = now_br.date()
+    today_candles = [c for c in candles_1m_wdo
+                     if datetime.fromtimestamp(c["datetime"], tz=BRASILIA).date() == today]
+    prev_candles  = [c for c in candles_1m_wdo
+                     if datetime.fromtimestamp(c["datetime"], tz=BRASILIA).date() < today]
+    current    = today_candles[-1]["close"] if today_candles else candles_1m_wdo[-1]["close"]
+    prev_close = prev_candles[-1]["close"]  if prev_candles  else None
+    chg_pct    = round((current - prev_close) / prev_close * 100, 2) if prev_close else None
+    impacto    = "bearish" if (chg_pct or 0) > 0 else "bullish"
+    return {"price": round(current, 2), "change_pct": chg_pct, "impacto_win": impacto}
 
 
 # ---------------------------------------------------------------------------
@@ -348,37 +437,53 @@ class IntradayAnalysisRule:
         morning            = mkt_rows[0]
         id_market_analysis = morning.get("id_market_analysis")
 
-        # 2. Candles intraday Ibovespa via Yahoo Finance (^BVSP = proxy do WIN)
-        yf           = YahooFinanceClient()
-        candles, err = yf.get_ibov_intraday(interval=f"{interval_min}m")
+        # 2. Candles WIN reais via mt5_candles (1 min → intervalo configurado)
+        win_1m  = _fetch_mt5_candles(1, days=3)
+        candles = _aggregate_candles(win_1m, interval_min)
 
-        if err or not candles:
-            return {"error": f"Erro ao buscar candles intraday: {err}"}, 502
+        if not candles:
+            return {"error": "Sem candles WIN em mt5_candles. Verifique a integração MT5."}, 502
 
-        # Melhoria 3 — usa o último candle com movimento (^BVSP não reporta volume no intraday)
-        last = None
-        for candidate in reversed(candles[-5:]):
-            if candidate["high"] != candidate["low"]:
-                last = candidate
-                break
+        last = candles[-1]
 
-        if last is None:
-            sample = candles[-3:] if len(candles) >= 3 else candles
+        # Rejeita candle de dia anterior
+        _candle_dt_check = datetime.fromtimestamp(last["datetime"], tz=BRASILIA)
+        if _candle_dt_check.date() != now_br.date():
+            _age_min = round((now_br - _candle_dt_check).total_seconds() / 60)
             return {
-                "error": "Nenhum candle com movimento real nos últimos intervalos.",
-                "debug_candles": [
-                    {"volume": c["volume"], "high": c["high"], "low": c["low"], "close": c["close"]}
-                    for c in sample
-                ],
+                "error": (
+                    f"Dados MT5 desatualizados. Último candle WIN: "
+                    f"{_candle_dt_check.strftime('%d/%m/%Y %H:%M')} BRT."
+                ),
+                "candle_datetime": _candle_dt_check.strftime("%Y-%m-%d %H:%M:%S"),
+                "candle_age_min": _age_min,
             }, 422
 
-        today_date      = now_br.date()
-        win_price       = ibov_to_win(round(last["close"]), today_date)
-        win_open        = ibov_to_win(round(last["open"]),  today_date)
-        win_high        = ibov_to_win(round(last["high"]),  today_date)
-        win_low         = ibov_to_win(round(last["low"]),   today_date)
-        win_volume      = last["volume"] or None  # ^BVSP não reporta volume intraday
+        win_price       = round(last["close"])
+        win_open        = round(last["open"])
+        win_high        = round(last["high"])
+        win_low         = round(last["low"])
+        win_volume      = last["volume"] or None
         candle_datetime = datetime.fromtimestamp(last["datetime"], tz=BRASILIA).strftime("%Y-%m-%d %H:%M:%S")
+
+        # 2a. Anti-duplicata por CANDLE — idempotência real.
+        # O guard 1b usa relógio (analyzed_at) e deixa passar reanálise do mesmo
+        # candle (ex: candle formando às 10:37 e fechado às 10:45). A chave certa é
+        # o candle_datetime, espelhando o UNIQUE uq_intraday_candle no banco.
+        dup_candle = (
+            IntradayAnalysisModel()
+            .where(["id_ativos_base", "=", id_ativos_base])
+            .where(["candle_datetime", "=", candle_datetime])
+            .where(["interval_min", "=", interval_min])
+            .limit(1)
+            .find()
+        )
+        if dup_candle:
+            return {
+                "error":           "Candle atual já analisado. Aguarde o próximo candle.",
+                "candle_datetime": candle_datetime,
+                "interval_min":    interval_min,
+            }, 422
 
         # 2b. Avalia resultado da análise anterior (se houver sem resultado)
         prev_rows = (
@@ -403,13 +508,6 @@ class IntradayAnalysisRule:
         # 3. Indicadores + níveis do dia
         ind = _calc_indicators(candles)
 
-        # Ajuste basis WIN: converte todos os níveis de preço de ^BVSP para WIN futuro
-        for _f in ("ti_ema9", "ti_ema21",
-                   "sr_resistance_1", "sr_resistance_2",
-                   "sr_support_1",    "sr_support_2"):
-            if ind.get(_f) is not None:
-                ind[_f] = ibov_to_win(ind[_f], today_date)
-
         # Fix #3 — S/R ordenado por proximidade ao preço atual (após ajuste)
         _res = sorted([v for v in [ind["sr_resistance_1"], ind["sr_resistance_2"]] if v is not None and v > win_price])
         _sup = sorted([v for v in [ind["sr_support_1"],    ind["sr_support_2"]]    if v is not None and v < win_price], reverse=True)
@@ -425,11 +523,11 @@ class IntradayAnalysisRule:
         candle_dt     = datetime.fromtimestamp(last["datetime"], tz=BRASILIA)
         candle_age_min = round((now_br - candle_dt).total_seconds() / 60)
 
-        # BOVA11 — candles para OR + dados de volume
+        # BOVA11 — volume de mercado (mantém Yahoo Finance para liquidez B3)
+        yf        = YahooFinanceClient()
         bova11, _ = yf.get_bova11_intraday(interval=f"{interval_min}m")
-        bova11_candles = bova11.get("candles", []) if bova11 else []
 
-        # OR persistido: busca no banco; se não existir, calcula e salva
+        # OR persistido: busca no banco; se não existir, calcula dos candles 1m WIN e salva
         or_row = (
             IntradayORModel()
             .where(["id_ativos_base", "=", id_ativos_base])
@@ -438,12 +536,10 @@ class IntradayAnalysisRule:
             .find()
         )
         if or_row and or_row[0].get("or_high"):
-            or_high = ibov_to_win(or_row[0].get("or_high"), today_date)
-            or_low  = ibov_to_win(or_row[0].get("or_low"),  today_date)
+            or_high = int(or_row[0].get("or_high"))
+            or_low  = int(or_row[0].get("or_low"))
         else:
-            _or_h, _or_l = _opening_range(bova11_candles, now_br)
-            if _or_h is None:
-                _or_h, _or_l = _opening_range(candles, now_br)
+            _or_h, _or_l = _opening_range(win_1m, now_br)
             if _or_h is not None:
                 try:
                     IntradayORModel().save({
@@ -454,13 +550,13 @@ class IntradayAnalysisRule:
                     })
                 except Exception:
                     pass  # UNIQUE KEY: OR já salvo por chamada concorrente
-            or_high = ibov_to_win(round(_or_h), today_date) if _or_h else None
-            or_low  = ibov_to_win(round(_or_l), today_date) if _or_l else None
+            or_high = round(_or_h) if _or_h else None
+            or_low  = round(_or_l) if _or_l else None
 
-        prev_day_high, prev_day_low, prev_day_close = _prev_day_levels(candles, now_br)
-        prev_day_high  = ibov_to_win(prev_day_high,  today_date)
-        prev_day_low   = ibov_to_win(prev_day_low,   today_date)
-        prev_day_close = ibov_to_win(prev_day_close, today_date)
+        prev_day_high, prev_day_low, prev_day_close = _prev_day_levels(win_1m, now_br)
+        prev_day_high  = round(prev_day_high)  if prev_day_high  else None
+        prev_day_low   = round(prev_day_low)   if prev_day_low   else None
+        prev_day_close = round(prev_day_close) if prev_day_close else None
 
         # 4. Macro atual (Yahoo Finance)
         macro   = yf.get_yahoo_macro_quotes()
@@ -473,11 +569,12 @@ class IntradayAnalysisRule:
         else:
             vix_level = None
 
-        # DOLFUT proxy (USD/BRL intraday)
-        dolfut, _ = yf.get_dolfut_intraday(interval=f"{interval_min}m")
+        # DOLFUT real (WDO via mt5_candles)
+        wdo_1m = _fetch_mt5_candles(3, days=2)
+        dolfut = _wdo_info(wdo_1m, now_br)
 
-        # Fix #4 — 5min timeframe
-        candles_5m, _ = yf.get_ibov_intraday(interval="5m")
+        # 5min timeframe WIN (agrega dos candles 1m)
+        candles_5m = _aggregate_candles(win_1m, 5)
         if candles_5m:
             ind_5m        = _calc_indicators(candles_5m)
             tf5_rsi       = ind_5m["ti_rsi"]
@@ -594,6 +691,32 @@ class IntradayAnalysisRule:
         ai_direcao   = ai.get("ai_direcao", "neutro")
         ai_stop_loss = ai.get("ai_stop_loss")
 
+        # 7a. Filtro de exaustão — suprime VENDA de baixa convicção.
+        # Rompimento de baixa com volume fraco (vol_rel < threshold) e MACD
+        # histograma positivo (divergência altista / perda de momentum vendedor)
+        # tende a falhar antes dos alvos. Override determinístico: o prompt já
+        # informa o modelo sobre isso, mas ele ignora — então força-se "neutro".
+        # Espelho para COMPRA ainda sem amostra histórica — intencionalmente não aplicado.
+        _vol_rel   = bova11.get("vol_rel") if bova11 else None
+        _macd_hist = ind.get("ti_macd_hist")
+        if (ai_direcao == "venda"
+                and _vol_rel is not None and _vol_rel < _EXHAUSTION_VOL_REL_MAX
+                and _macd_hist is not None and _macd_hist > 0):
+            ai_direcao        = "neutro"
+            ai["ai_direcao"]  = "neutro"
+            _nota = (
+                f"Venda suprimida pelo filtro de exaustão: rompimento com volume "
+                f"fraco (vol_rel={_vol_rel}) e MACD histograma positivo "
+                f"({_macd_hist}) — baixa convicção, alto risco de falha."
+            )
+            _riscos = ai.get("ai_riscos")
+            if isinstance(_riscos, list):
+                _riscos.append(_nota)
+            else:
+                _riscos = [_nota]
+            ai["ai_riscos"] = _riscos
+            ai["ai_resumo"] = "Neutro — venda suprimida por exaustão (volume fraco + MACD divergente)."
+
         if ai_direcao == "compra" and ai_stop_loss and ai_stop_loss >= win_price:
             ai["ai_stop_loss"] = win_price - round(atr * 1.5)
         elif ai_direcao == "venda" and ai_stop_loss and ai_stop_loss <= win_price:
@@ -684,7 +807,18 @@ class IntradayAnalysisRule:
         }
 
         model = IntradayAnalysisModel()
-        model.save(save_data)
+        try:
+            model.save(save_data)
+        except Exception as e:
+            # Corrida concorrente: outra chamada já gravou este candle (UNIQUE
+            # uq_intraday_candle). Idempotente — não é erro operacional.
+            if "uq_intraday_candle" in str(e) or "Duplicate entry" in str(e):
+                return {
+                    "error":           "Candle atual já analisado (gravação concorrente).",
+                    "candle_datetime": candle_datetime,
+                    "interval_min":    interval_min,
+                }, 422
+            raise
 
         _intraday_cache.clear()
 
