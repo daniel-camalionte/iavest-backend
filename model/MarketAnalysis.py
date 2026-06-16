@@ -65,6 +65,7 @@ class MarketAnalysisModel(BaseModel):
             "td_prev_high":        "td_prev_high",
             "td_prev_low":         "td_prev_low",
             "td_opening_gap_pct":  "td_opening_gap_pct",
+            "td_pct":              "td_pct",
             "td_consecutive_days": "td_consecutive_days",
             "td_volume":           "td_volume",
             "td_obv":              "td_obv",

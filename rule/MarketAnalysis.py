@@ -530,6 +530,7 @@ class BaseMarketAnalyzer(ABC):
                 "td_prev_high":        technical.get("prev_high"),
                 "td_prev_low":         technical.get("prev_low"),
                 "td_opening_gap_pct":  technical.get("opening_gap_pct"),
+                "td_pct":              technical.get("percent_change"),
                 "td_consecutive_days": technical.get("consecutive_days"),
                 "td_volume":           technical.get("volume"),
                 "td_obv":              technical.get("obv"),
