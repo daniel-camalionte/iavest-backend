@@ -156,6 +156,7 @@ api.add_resource(appController.MarketAnalysisDetailController, '/market/analysis
 
 #Intraday Analysis
 api.add_resource(appController.IntradayAnalyzeController, '/market/intraday')
+api.add_resource(appController.IntradayResolvePendingController, '/market/intraday/resolve')
 api.add_resource(appController.IntradayAnalysisLatestController, '/market/intraday/latest')
 api.add_resource(appController.IntradayAnalysisListController, '/market/intraday/list')
 

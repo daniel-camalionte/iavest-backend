@@ -192,6 +192,27 @@ class IntradayAnalyzeController(MethodView):
         )
 
 
+class IntradayResolvePendingController(MethodView):
+    """
+    GET /market/intraday/resolve?id_ativos_base=1
+
+    Resolve sinais intraday pendentes (sem resultado) — ex: último sinal do dia.
+    Pensado para rodar no fim do pregão. Requer header Authorization: <SCHEDULER_SECRET>
+    """
+
+    def get(self):
+        auth_error = check_scheduler_auth()
+        if auth_error:
+            return auth_error
+
+        try:
+            id_ativos_base = int(request.args.get("id_ativos_base", 1))
+        except (TypeError, ValueError):
+            return {"error": "Parâmetro 'id_ativos_base' deve ser um número inteiro"}, 400
+
+        return IntradayAnalysisRule.resolve_pending(id_ativos_base=id_ativos_base)
+
+
 class IntradayAnalysisLatestController(MethodView):
     """GET /market/intraday/latest — último sinal intraday (cache 5min)"""
 

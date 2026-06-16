@@ -840,6 +840,62 @@ class IntradayAnalysisRule:
 
         return result, 200
 
+    @staticmethod
+    def resolve_pending(id_ativos_base=1, lookback_days=5):
+        """Resolve sinais não-neutros que ficaram sem `resultado` (ex: último
+        sinal do dia, que nunca teve um analyze() seguinte para avaliá-lo).
+        Avalia cada pendente contra os candles do PRÓPRIO dia (mt5_candles).
+        Pensado para rodar no fim do pregão via scheduler."""
+        now_br = datetime.now(BRASILIA)
+        win_1m = _fetch_mt5_candles(1, days=lookback_days)
+        if not win_1m:
+            return {"error": "Sem candles WIN em mt5_candles."}, 502
+
+        cutoff_date = (now_br - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+        rows = (
+            IntradayAnalysisModel()
+            .where(["id_ativos_base", "=", id_ativos_base])
+            .where(["DATE(candle_datetime)", ">=", cutoff_date])
+            .order("candle_datetime", "ASC")
+            .find()
+        ) or []
+        pend = [r for r in rows
+                if r.get("resultado") is None and r.get("ai_direcao") != "neutro"]
+
+        resolved = []
+        for rec in pend:
+            cdt = rec.get("candle_datetime")
+            if isinstance(cdt, str):
+                sig_day = datetime.strptime(cdt, "%Y-%m-%d %H:%M:%S").date()
+            elif cdt:
+                sig_day = cdt.date()
+            else:
+                continue
+            interval = rec.get("interval_min") or 15
+            day_1m = [c for c in win_1m
+                      if datetime.fromtimestamp(c["datetime"], tz=BRASILIA).date() == sig_day]
+            if not day_1m:
+                continue
+            day_candles = _aggregate_candles(day_1m, interval)
+            res_val, res_preco, res_dir = _avaliar_resultado(rec, day_candles, now_br)
+            if not res_val:
+                continue
+            IntradayAnalysisModel().update({
+                "resultado":         res_val,
+                "resultado_preco":   res_preco,
+                "resultado_at":      now_br.strftime("%Y-%m-%d %H:%M:%S"),
+                "resultado_direcao": res_dir,
+            }, rec.get("id_intraday_analysis"))
+            resolved.append({
+                "id":                rec.get("id_intraday_analysis"),
+                "candle_datetime":   str(cdt),
+                "resultado":         res_val,
+                "resultado_direcao": res_dir,
+            })
+
+        _intraday_cache.clear()
+        return {"resolved": len(resolved), "pendentes": len(pend), "details": resolved}, 200
+
 
 class IntradayAnalysisLatestRule:
 
