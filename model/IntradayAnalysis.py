@@ -64,6 +64,7 @@ class IntradayAnalysisModel(BaseModel):
             "ai_direcao":           "ai_direcao",
             "ai_forca":             "ai_forca",
             "ai_confianca":         "ai_confianca",
+            "contra_tendencia":     "contra_tendencia",
             "ai_stop_loss":         "ai_stop_loss",
             "ai_alvo_1":            "ai_alvo_1",
             "ai_alvo_2":            "ai_alvo_2",
