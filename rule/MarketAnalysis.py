@@ -15,6 +15,37 @@ _cache = {}  # {id_ativos_base: {"data": None, "timestamp": None}}
 
 BRASILIA = timezone(timedelta(hours=-3))
 
+# Identificador de versão — aparece nas mensagens de erro para confirmar que o
+# servidor está com o código atualizado (se o erro não mostrar essa tag/valor,
+# o deploy ainda não pegou). Atualizar ao mexer no _call_claude.
+_MKT_VERSION    = "mkt-2026-06-17.1"
+_MKT_MAX_TOKENS = 4096
+
+# Mapa id_ativos_base -> id_symbols (mt5_candles). 1 = WIN.
+_ATIVO_SYMBOL = {1: 1}
+
+
+def _empirical_basis(ibov_price, ref_date, id_symbol=1):
+    """Fator de conversão Ibovespa spot -> WIN calibrado pelo ÚLTIMO fechamento
+    REAL do WIN (mt5_candles): basis = WIN_real / Ibov_real. Mais fiel que o
+    carrego teórico (SELIC), que vinha superestimando o WIN em ~3% e divergindo
+    do intraday. Fallback: carrego teórico (ibov_to_win) se não houver candle WIN."""
+    if not ibov_price:
+        return 1.0
+    try:
+        from library.MySql import MySql
+        rows = MySql().fetch(
+            "SELECT close FROM mt5_candles WHERE id_symbols=%s ORDER BY `datetime` DESC LIMIT 1",
+            (id_symbol,),
+        )
+        if rows and rows[0].get("close"):
+            win_close = float(rows[0]["close"])
+            if win_close > 0:
+                return win_close / ibov_price
+    except Exception:
+        pass
+    return ibov_to_win(ibov_price, ref_date) / ibov_price  # fallback: carrego teórico
+
 # ---------------------------------------------------------------------------
 # Feriados B3 — atualizar anualmente
 # ---------------------------------------------------------------------------
@@ -328,7 +359,7 @@ def _call_claude(macro: dict, technical: dict, system_prompt: str):
         },
         payload={
             "model":      "claude-opus-4-8",
-            "max_tokens": 2048,
+            "max_tokens": _MKT_MAX_TOKENS,
             "system":     system_prompt,
             "messages":   [{"role": "user", "content": user_content}],
         },
@@ -337,9 +368,23 @@ def _call_claude(macro: dict, technical: dict, system_prompt: str):
 
     if not resp or resp["status_code"] not in (200, 201):
         _err = resp["data"] if resp else "sem resposta"
-        raise RuntimeError(f"Claude API {resp['status_code'] if resp else 'timeout'}: {_err}")
+        raise RuntimeError(
+            f"[{_MKT_VERSION}] Claude API {resp['status_code'] if resp else 'timeout'}: {_err}"
+        )
 
-    raw_text = resp["data"]["content"][0]["text"].strip()
+    data    = resp["data"]
+    usage   = data.get("usage") or {}
+    out_tok = usage.get("output_tokens")
+    in_tok  = usage.get("input_tokens")
+    stop    = data.get("stop_reason")
+    # rótulo comum a todos os erros: versão + tokens (pra saber se está atualizado e se truncou)
+    _tag = f"[{_MKT_VERSION} max_tokens={_MKT_MAX_TOKENS} in={in_tok} out={out_tok} stop={stop}]"
+
+    # Resposta truncada: bateu o limite de tokens antes de fechar o JSON.
+    if stop == "max_tokens":
+        raise RuntimeError(f"{_tag} Resposta truncada (max_tokens atingido) — aumente max_tokens.")
+
+    raw_text = data["content"][0]["text"].strip()
 
     if raw_text.startswith("```"):
         raw_text = raw_text.split("```")[1]
@@ -348,8 +393,11 @@ def _call_claude(macro: dict, technical: dict, system_prompt: str):
 
     try:
         return json.loads(raw_text)
-    except json.JSONDecodeError:
-        raise RuntimeError(f"Claude retornou JSON inválido: {raw_text[:300]}")
+    except json.JSONDecodeError as e:
+        # mostra início E fim do texto (não só o começo) pra ver onde realmente quebra
+        raise RuntimeError(
+            f"{_tag} JSON inválido ({e}): inicio={raw_text[:150]!r} ... fim={raw_text[-150:]!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -394,16 +442,29 @@ class BaseMarketAnalyzer(ABC):
         # --- Cache MISS ---
         macro, technical = self._fetch_data()
 
-        # Ajuste basis WIN: converte preços do ^BVSP para estimativa do WIN futuro
+        # Preserva o Ibovespa spot (^BVSP) ANTES da conversão, para exibição.
+        # td_price e demais níveis são convertidos para WIN; este guarda o índice real.
+        _ibov_spot = technical.get("price")
+        technical["ibov_price"] = _ibov_spot
+
+        # Conversão Ibov -> WIN via BASIS EMPÍRICO (WIN real da mt5_candles / Ibov real),
+        # no lugar do carrego teórico que superestimava ~3% e divergia do intraday.
+        # Mantém os indicadores calculados no Ibov diário (histórico de 1 ano),
+        # mas na escala real do WIN.
         _today = date.today()
+        _basis = _empirical_basis(_ibov_spot, _today, _ATIVO_SYMBOL.get(self.id_ativos_base, 1))
+
+        def _to_win(v):
+            return round(v * _basis) if v is not None else None
+
         for _f in ("price", "prev_close", "prev_high", "prev_low",
                    "sma9", "sma21", "sma50", "sma200", "ema9", "ema21"):
             if technical.get(_f) is not None:
-                technical[_f] = ibov_to_win(technical[_f], _today)
+                technical[_f] = _to_win(technical[_f])
         _bb = technical.get("bbands") or {}
         for _f in ("upper", "middle", "lower"):
             if _bb.get(_f) is not None:
-                _bb[_f] = ibov_to_win(_bb[_f], _today)
+                _bb[_f] = _to_win(_bb[_f])
 
         if "_error" in macro:
             return {"error": "Falha ao coletar dados macro", "detail": macro["_error"]}, 503
@@ -526,6 +587,7 @@ class BaseMarketAnalyzer(ABC):
                 "ap_description":      ap.get("description"),
 
                 "td_price":            technical.get("price"),
+                "td_ibov_price":       technical.get("ibov_price"),
                 "td_prev_close":       technical.get("prev_close"),
                 "td_prev_high":        technical.get("prev_high"),
                 "td_prev_low":         technical.get("prev_low"),

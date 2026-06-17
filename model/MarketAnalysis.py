@@ -61,6 +61,7 @@ class MarketAnalysisModel(BaseModel):
             "ap_description":      "ap_description",
 
             "td_price":            "td_price",
+            "td_ibov_price":       "td_ibov_price",
             "td_prev_close":       "td_prev_close",
             "td_prev_high":        "td_prev_high",
             "td_prev_low":         "td_prev_low",
