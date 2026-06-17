@@ -252,8 +252,13 @@ def _round5(v):
     return int(round(v / 5) * 5)
 
 
+_MIN_RR_CENARIO = 1.5  # R/R mínimo no alvo 1; aperta o stop p/ garantir
+
+
 def _enrich_daytrade_scenarios(scenarios: dict) -> dict:
-    """Arredonda preços para tick WIN e computa risco_pontos/risco_reais por cenário."""
+    """Arredonda para tick WIN, DROPA alvo_2, valida a direção pela geometria
+    (alvo_1 vs entrada) e APERTA o stop para garantir R/R >= 1.5 no alvo_1 —
+    corrige stops extremos, R/R < 1 e stop do lado errado, de forma determinística."""
     if not scenarios:
         return scenarios
     result = {}
@@ -261,20 +266,39 @@ def _enrich_daytrade_scenarios(scenarios: dict) -> dict:
         if not isinstance(s, dict):
             result[name] = s
             continue
-        entrada    = _round5(s.get("entrada"))
-        stop_loss  = _round5(s.get("stop_loss"))
-        alvo_1     = _round5(s.get("alvo_1"))
-        alvo_2     = _round5(s.get("alvo_2"))
-        risco_pts  = abs(entrada - stop_loss) if entrada is not None and stop_loss is not None else None
-        risco_reais = round(risco_pts * 0.20, 2) if risco_pts is not None else None
+        entrada = _round5(s.get("entrada"))
+        stop    = _round5(s.get("stop_loss"))
+        alvo_1  = _round5(s.get("alvo_1"))
+
+        rr_final = None
+        if entrada is not None and alvo_1 is not None and stop is not None and entrada != alvo_1:
+            is_long = alvo_1 > entrada               # direção pela geometria, não pelo nome
+            reward  = abs(alvo_1 - entrada)
+            risco   = abs(entrada - stop)
+            rr      = (reward / risco) if risco else None
+
+            if reward > 0 and (rr is None or rr < _MIN_RR_CENARIO):
+                # aperta o stop p/ atingir o R/R mínimo, recolocando no lado correto
+                novo_risco = round(reward / _MIN_RR_CENARIO)
+                stop = _round5(entrada - novo_risco if is_long else entrada + novo_risco)
+            elif (is_long and stop >= entrada) or ((not is_long) and stop <= entrada):
+                # stop do lado errado: recoloca mantendo a mesma distância
+                stop = _round5(entrada - risco if is_long else entrada + risco)
+
+            risco_pts = abs(entrada - stop)
+            rr_final  = round(reward / risco_pts, 2) if risco_pts else None
+        else:
+            risco_pts = abs(entrada - stop) if entrada is not None and stop is not None else None
+
         result[name] = {
             **s,
-            "entrada":      entrada,
-            "stop_loss":    stop_loss,
-            "alvo_1":       alvo_1,
-            "alvo_2":       alvo_2,
-            "risco_pontos": risco_pts,
-            "risco_reais":  risco_reais,
+            "entrada":       entrada,
+            "stop_loss":     stop,
+            "alvo_1":        alvo_1,
+            "alvo_2":        None,   # dropado — evita bug de ordenação e simplifica
+            "risco_pontos":  risco_pts,
+            "risco_reais":   round(risco_pts * 0.20, 2) if risco_pts is not None else None,
+            "risco_retorno": f"1:{rr_final}" if rr_final is not None else s.get("risco_retorno"),
         }
     return result
 
