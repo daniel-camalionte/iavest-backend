@@ -25,4 +25,5 @@ from controller.TradePerformance import TradePerformanceMensalController, TradeP
 from controller.PerformanceDashboard import PerformanceDashboardController, PerformanceTradesController
 from controller.TradeCandles import TradeCandlesController
 from controller.Faq import FaqListController, FaqCacheClearController
+from controller.SimuladorOrdemCliente import SimuladorOrdemListaController, SimuladorOrdemItemController, SimuladorOrdemEncerrarController, SimuladorAnaliseIaController
 

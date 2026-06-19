@@ -161,6 +161,12 @@ api.add_resource(appController.IntradayHealthController, '/market/intraday/healt
 api.add_resource(appController.IntradayAnalysisLatestController, '/market/intraday/latest')
 api.add_resource(appController.IntradayAnalysisListController, '/market/intraday/list')
 
+#Simulador de Ordens
+api.add_resource(appController.SimuladorOrdemListaController, '/simulador/ordem')
+api.add_resource(appController.SimuladorOrdemItemController, '/simulador/ordem/<int:id_ordem>')
+api.add_resource(appController.SimuladorOrdemEncerrarController, '/simulador/ordem/<int:id_ordem>/encerrar')
+api.add_resource(appController.SimuladorAnaliseIaController, '/simulador/ordem/<int:id_ordem>/analise-ia')
+
 #touch ~/apps_wsgi/stg.wsgi
 
 

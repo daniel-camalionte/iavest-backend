@@ -126,3 +126,8 @@ ticket = {
 google = {
     "CLIENT_ID": os.environ.get("GOOGLE_CLIENT_ID", "")
 }
+
+# PLANOS — liberação de features premium por plano (ids no .env, separados por vírgula)
+planos = {
+    "ANALISE_IA": [int(p) for p in os.environ.get("PLANOS_ANALISE_IA", "3,7").split(",") if p.strip().isdigit()],
+}
