@@ -3,6 +3,7 @@ from flask.views import MethodView
 from flask_jwt_extended import jwt_required
 
 from rule.MarketAnalysis import MarketAnalysisRule, MarketAnalysisListRule, MarketAnalysisDetailRule
+from rule.MarketPrice import MarketPriceRule
 from rule.IntradayAnalysis import IntradayAnalysisRule, IntradayAnalysisLatestRule, IntradayAnalysisListRule, IntradayHealthRule
 from library.YahooFinanceClient import YahooFinanceClient
 from library.HttpClient import HttpClient
@@ -157,6 +158,19 @@ class MarketAnalysisDetailController(MethodView):
             id_market_analysis=id_market_analysis,
             id_ativos_base=id_ativos_base,
         )
+
+
+class MarketPriceController(MethodView):
+    """GET /market/price — último candle do MT5 por símbolo (preço de mercado ao vivo)."""
+
+    @jwt_required
+    def get(self):
+        try:
+            id_symbols = int(request.args.get("id_symbols", 0)) or None
+        except (TypeError, ValueError):
+            id_symbols = None
+
+        return MarketPriceRule.latest(id_symbols=id_symbols)
 
 
 class IntradayAnalyzeController(MethodView):

@@ -153,6 +153,7 @@ api.add_resource(appController.MarketCacheClearController, '/market/cache')
 api.add_resource(appController.MarketDebugController, '/market/debug')
 api.add_resource(appController.MarketAnalysisListController, '/market/analysis')
 api.add_resource(appController.MarketAnalysisDetailController, '/market/analysis/<int:id_market_analysis>', '/market/analysis/latest')
+api.add_resource(appController.MarketPriceController, '/market/price')
 
 #Intraday Analysis
 api.add_resource(appController.IntradayAnalyzeController, '/market/intraday')

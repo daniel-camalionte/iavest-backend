@@ -221,6 +221,34 @@
         }
       }
     },
+    "/market/price": {
+      "get": {
+        "tags": ["Market Analysis"],
+        "summary": "Preço de mercado ao vivo (MT5)",
+        "description": "Retorna o último candle (mt5_candles) de cada símbolo, com nome amigável. Campo 'preco' = close arredondado (mesma fonte do preco_mercado do simulador). Use 'datetime' para indicar o frescor do dado no front.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "name": "id_symbols",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "description": "Filtro por símbolo (1 = WIN, 3 = WDO). Sem filtro retorna todos."
+          }
+        ],
+        "responses": {
+          "200": { "description": "Lista de preços por símbolo. Ex: { \"data\": [ { \"id_symbols\": 1, \"type\": \"WIN\", \"ticker\": \"WINM223\", \"nome\": \"Mini Índice\", \"datetime\": \"2026-06-18 18:24:00\", \"open\": 170755.5, \"high\": 170785.5, \"low\": 170740.5, \"close\": 170755.5, \"preco\": 170756, \"tick_vol\": 190, \"vol\": 1194 } ] }" },
+          "401": { "description": "Token inválido ou ausente" }
+        }
+      }
+    },
     "/market/analysis/{id}": {
       "get": {
         "tags": ["Market Analysis"],
@@ -264,7 +292,7 @@
               "properties": {
                 "status":   { "type": "string", "example": "success" },
                 "msg":      { "type": "string", "example": "Conexão com Claude API funcionando" },
-                "model":    { "type": "string", "example": "claude-opus-4-5" },
+                "model":    { "type": "string", "example": "claude-opus-4-8" },
                 "response": { "type": "string", "example": "OK" }
               }
             }
@@ -374,6 +402,258 @@
             }
           },
           "400": { "description": "id_ativos_base inválido ou não suportado" }
+        }
+      }
+    },
+    "/market/intraday/resolve": {
+      "get": {
+        "tags": ["Market Analysis"],
+        "summary": "Resolver sinais intraday pendentes (fim de pregão)",
+        "description": "Resolve os sinais intraday não-neutros que ficaram sem resultado — tipicamente o último sinal de cada dia, que nunca teve um analyze() seguinte para avaliá-lo. Avalia cada pendente contra os candles do próprio dia (tabela mt5_candles), marcando stop_atingido / alvo_1_atingido / alvo_2_atingido / expirado e a direção do resultado (favor, contra ou neutro). Pensado para ser chamado pelo scheduler uma vez ao fim do pregão (~18h BRT). Autenticação via header X-Scheduler-Secret ou HTTP Basic Auth (password = SCHEDULER_SECRET).",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "X-Scheduler-Secret",
+            "in": "header",
+            "required": false,
+            "type": "string",
+            "description": "SCHEDULER_SECRET da env. Alternativa ao Basic Auth."
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "type": "string",
+            "description": "HTTP Basic Auth — formato: Basic base64(user:SCHEDULER_SECRET). Aceito por cron jobs que não suportam headers customizados."
+          },
+          {
+            "name": "id_ativos_base",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 1,
+            "description": "ID do ativo. 1 = Mini Índice (WIN).",
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pendentes processados",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "resolved":  { "type": "integer", "description": "Quantos sinais foram resolvidos nesta chamada", "example": 1 },
+                "pendentes": { "type": "integer", "description": "Quantos sinais pendentes foram avaliados", "example": 1 },
+                "details": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id":                { "type": "integer", "example": 40 },
+                      "candle_datetime":   { "type": "string",  "example": "2026-06-15 16:45:00" },
+                      "resultado":         { "type": "string",  "example": "stop_atingido" },
+                      "resultado_direcao": { "type": "string",  "example": "contra" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Não autorizado (SCHEDULER_SECRET inválido ou ausente)" },
+          "502": { "description": "Sem candles WIN em mt5_candles" }
+        }
+      }
+    },
+    "/market/intraday/health": {
+      "get": {
+        "tags": ["Market Analysis"],
+        "summary": "Health check do pipeline intraday",
+        "description": "Monitoramento da infraestrutura intraday — NÃO avalia qualidade do sinal, só verifica se o pipeline está vivo: a análise fundamental do dia rodou, o MT5 está entregando candles frescos, há sinais saindo e a resolução está em dia. Quando detecta problema (status warning ou critical), grava uma linha em intraday_health_log com os dados para debug posterior. Fora do pregão retorna status idle e não grava nada. Pensado para rodar via scheduler a cada ~15min. Autenticação via header X-Scheduler-Secret ou HTTP Basic Auth (password = SCHEDULER_SECRET).",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "X-Scheduler-Secret",
+            "in": "header",
+            "required": false,
+            "type": "string",
+            "description": "SCHEDULER_SECRET da env. Alternativa ao Basic Auth."
+          },
+          {
+            "name": "id_ativos_base",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "default": 1,
+            "description": "ID do ativo. 1 = Mini Índice (WIN).",
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status do pipeline",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "status":        { "type": "string", "description": "ok | warning | critical | idle (fora do pregão)", "example": "warning" },
+                "pregao_aberto": { "type": "boolean", "example": true },
+                "checked_at":    { "type": "string", "example": "2026-06-16 14:30:00" },
+                "falhas":        { "type": "array", "items": { "type": "string" }, "example": ["mt5_atrasado"] },
+                "checks":        { "type": "object", "description": "Detalhe de cada verificação (fundamental, mt5, ultimo_sinal, pendencias, sinais_hoje)" }
+              }
+            }
+          },
+          "401": { "description": "Não autorizado (SCHEDULER_SECRET inválido ou ausente)" }
+        }
+      }
+    },
+    "/simulador/ordem": {
+      "get": {
+        "tags": ["Simulador de Ordens"],
+        "summary": "Listar ordens do cliente",
+        "description": "Lista as ordens simuladas do cliente autenticado (id_cliente vem do JWT), cada uma com os cálculos ao vivo no objeto `calculo` (ganho em pontos e R$, R/R, MFE/MAE, etc.). R$ 0,20 por ponto por contrato.",
+        "produces": ["application/json"],
+        "parameters": [
+          { "name": "Authorization", "in": "header", "required": true, "type": "string", "default": "Bearer " },
+          { "name": "status", "in": "query", "required": false, "type": "string", "description": "Filtro: enviada | executada" },
+          { "name": "data", "in": "query", "required": false, "type": "string", "description": "Filtro por data de envio (YYYY-MM-DD)" }
+        ],
+        "responses": {
+          "200": { "description": "Lista de ordens com cálculos" },
+          "401": { "description": "Token inválido ou ausente" }
+        }
+      },
+      "post": {
+        "tags": ["Simulador de Ordens"],
+        "summary": "Criar ordem (já executada)",
+        "description": "Cadastra a ordem JÁ EXECUTADA — o cadastro é a própria operação aberta. id_cliente vem do JWT e id_ativos_base é fixo (1=WIN) — não enviar. Status inicial `executada`.",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          { "name": "Authorization", "in": "header", "required": true, "type": "string", "default": "Bearer " },
+          {
+            "in": "body", "name": "body", "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["direcao", "preco_entrada"],
+              "properties": {
+                "direcao":       { "type": "string", "enum": ["compra", "venda"], "example": "compra" },
+                "preco_entrada": { "type": "integer", "example": 173000 },
+                "stop_loss":     { "type": "integer", "example": 172400 },
+                "alvo":          { "type": "integer", "example": 174200 },
+                "contratos":     { "type": "integer", "example": 2 },
+                "executada_em":  { "type": "string", "description": "Opcional — data/hora real da execução no MT5 (YYYY-MM-DD HH:MM:SS). Default: agora.", "example": "2026-06-17 10:16:00" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "201": { "description": "Ordem criada (com cálculos)" },
+          "400": { "description": "direcao ou preco_entrada inválidos" },
+          "401": { "description": "Token inválido ou ausente" }
+        }
+      }
+    },
+    "/simulador/ordem/{id_ordem}": {
+      "get": {
+        "tags": ["Simulador de Ordens"],
+        "summary": "Detalhe de uma ordem",
+        "description": "Retorna a ordem com os cálculos ao vivo. Só retorna ordens do próprio cliente (JWT).",
+        "produces": ["application/json"],
+        "parameters": [
+          { "name": "Authorization", "in": "header", "required": true, "type": "string", "default": "Bearer " },
+          { "name": "id_ordem", "in": "path", "required": true, "type": "integer" }
+        ],
+        "responses": {
+          "200": { "description": "Ordem retornada" },
+          "404": { "description": "Ordem não encontrada" },
+          "401": { "description": "Token inválido ou ausente" }
+        }
+      },
+      "delete": {
+        "tags": ["Simulador de Ordens"],
+        "summary": "Excluir ordem",
+        "description": "Remove uma ordem (cadastro equivocado). Só o próprio cliente (JWT).",
+        "produces": ["application/json"],
+        "parameters": [
+          { "name": "Authorization", "in": "header", "required": true, "type": "string", "default": "Bearer " },
+          { "name": "id_ordem", "in": "path", "required": true, "type": "integer" }
+        ],
+        "responses": {
+          "200": { "description": "Excluída", "schema": { "type": "object", "properties": { "deleted": { "type": "boolean", "example": true } } } },
+          "404": { "description": "Ordem não encontrada" },
+          "401": { "description": "Token inválido ou ausente" }
+        }
+      }
+    },
+    "/simulador/ordem/{id_ordem}/encerrar": {
+      "put": {
+        "tags": ["Simulador de Ordens"],
+        "summary": "Encerrar ordem",
+        "description": "Encerra uma ordem executada e trava o resultado. `encerrada_em` é obrigatório (data/hora do encerramento no MT5 — não o momento do clique). `preco_saida` é opcional: se omitido, usa o WIN (mt5) no horário do encerramento.",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          { "name": "Authorization", "in": "header", "required": true, "type": "string", "default": "Bearer " },
+          { "name": "id_ordem", "in": "path", "required": true, "type": "integer" },
+          {
+            "in": "body", "name": "body", "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["encerrada_em"],
+              "properties": {
+                "encerrada_em": { "type": "string", "description": "Data/hora do encerramento no MT5 (YYYY-MM-DD HH:MM:SS)", "example": "2026-06-17 15:00:00" },
+                "preco_saida":  { "type": "integer", "description": "Opcional — preço de saída. Se omitido, usa o WIN do mt5 no horário." }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Ordem encerrada (resultado travado)" },
+          "400": { "description": "encerrada_em é obrigatório" },
+          "404": { "description": "Ordem não encontrada" },
+          "422": { "description": "Ordem não está 'executada'" },
+          "401": { "description": "Token inválido ou ausente" }
+        }
+      }
+    },
+    "/simulador/ordem/{id_ordem}/analise-ia": {
+      "get": {
+        "tags": ["Simulador de Ordens"],
+        "summary": "Análise IA da posição (premium)",
+        "description": "Análise técnica da posição por IA (Claude Haiku). Liberada por PLANO (config PLANOS_ANALISE_IA). Para ordem ABERTA: cruza fundamental + intraday + evolução do mercado e devolve parecer (continua_tendencia, recomendação, alvos, stop, análise técnica). Cache por candle (não consome token se o mercado não andou). Detecta rolagem de contrato e a desconsidera. Ordem ENCERRADA: texto genérico sem custo de IA. Sem o plano: retorna plano=false + plano_texto (upsell).",
+        "produces": ["application/json"],
+        "parameters": [
+          { "name": "Authorization", "in": "header", "required": true, "type": "string", "default": "Bearer " },
+          { "name": "id_ordem", "in": "path", "required": true, "type": "integer" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resposta varia conforme acesso e status da ordem",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "plano":       { "type": "boolean", "description": "true se o cliente tem plano que libera a análise" },
+                "plano_texto": { "type": "string",  "description": "Presente quando plano=false — texto de upsell" },
+                "status_ordem": { "type": "string", "description": "executada | encerrada" },
+                "analise_ia": {
+                  "type": "object",
+                  "description": "Parecer da IA (ordem aberta com plano). null se ordem encerrada ou IA indisponível.",
+                  "properties": {
+                    "continua_tendencia": { "type": "boolean" },
+                    "recomendacao":       { "type": "string", "example": "encerrar" },
+                    "alvo_1": { "type": "integer" }, "alvo_2": { "type": "integer" }, "stop": { "type": "integer" },
+                    "forca":  { "type": "string" },
+                    "analise_tecnica": { "type": "string" }
+                  }
+                },
+                "contexto":      { "type": "object", "description": "Fundamental + intraday + mercado + cálculo da ordem (usado pela IA)" },
+                "ia_disponivel": { "type": "boolean" },
+                "cache":         { "type": "boolean", "description": "true se veio do cache (mesmo candle)" }
+              }
+            }
+          },
+          "404": { "description": "Ordem não encontrada" },
+          "401": { "description": "Token inválido ou ausente" }
         }
       }
     },
