@@ -55,7 +55,7 @@ Contexto do ativo:
 Referências de contexto do dia (use obrigatoriamente na análise):
 - prev_day_high/low/close: níveis estruturais do dia anterior. Preço acima de prev_day_high é breakout bullish; abaixo de prev_day_low é breakout bearish.
 - opening_range_high/low: máxima e mínima dos primeiros 30min (09:00–09:30). Rompimento acima do OR é sinal de compra; abaixo é sinal de venda. Preço dentro do OR = indefinição.
-- dolfut_proxy: USD/BRL tem correlação INVERSA com WIN. impacto_win=bearish significa dólar subindo → pressão vendedora no WIN. impacto_win=bullish significa dólar caindo → pressão compradora no WIN.
+- dolfut_proxy: USD/BRL tem correlação INVERSA com WIN. impacto_win=bearish significa dólar subindo → pressão vendedora no WIN. impacto_win=bullish significa dólar caindo → pressão compradora no WIN. impacto_win=neutro significa dólar praticamente de lado (variação irrelevante) → NÃO use o dólar como confluência nem como risco; trate-o como fator ausente. Atenção: o dólar é apenas um fator de contexto fraco — não o use como motivo principal de uma decisão.
 - bova11_volume: volume real do ETF BOVA11 (mesma bolsa B3, mesmos horários). vol_rel compara o candle atual com a média dos últimos 20. vol_rel > 1.5 = movimento com convicção; vol_rel < 0.5 = movimento fraco, não confiar em rompimentos.
 - indicadores_5min: mesmo ativo no timeframe de 5min. Use para confirmar ou questionar o sinal do 15min. tf5_alinhamento=alinhado_compra/venda = sinal forte; conflitante = cautela extra.
 - ema_sinal: direção atual das EMAs (alta/baixa) ou cruzamento recente (bullish_cross/bearish_cross). Cruzamento recente é sinal mais forte.
@@ -317,6 +317,12 @@ def _aggregate_candles(candles_1m, interval_min):
     return list(buckets.values())
 
 
+# Abaixo desta variação (%) o dólar está praticamente de lado: não gera viés
+# direcional no WIN (impacto_win=neutro). Backtest (jun/26): o alinhamento com o
+# dólar não prevê acerto do sinal — o deadzone evita citar ruído como confluência.
+DOLFUT_DEADZONE_PCT = 0.20
+
+
 def _wdo_info(candles_1m_wdo, now_br):
     """Preço atual do WDO e variação vs fechamento do dia anterior."""
     if not candles_1m_wdo:
@@ -329,7 +335,12 @@ def _wdo_info(candles_1m_wdo, now_br):
     current    = today_candles[-1]["close"] if today_candles else candles_1m_wdo[-1]["close"]
     prev_close = prev_candles[-1]["close"]  if prev_candles  else None
     chg_pct    = round((current - prev_close) / prev_close * 100, 2) if prev_close else None
-    impacto    = "bearish" if (chg_pct or 0) > 0 else "bullish"
+    if chg_pct is None:
+        impacto = None
+    elif abs(chg_pct) < DOLFUT_DEADZONE_PCT:
+        impacto = "neutro"          # dólar de lado: não usar como viés direcional
+    else:
+        impacto = "bearish" if chg_pct > 0 else "bullish"
     return {"price": round(current, 2), "change_pct": chg_pct, "impacto_win": impacto}
 
 
