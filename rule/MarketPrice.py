@@ -9,6 +9,11 @@ _NOME_SYMBOL = {
     "WDO": "Mini Dólar",
 }
 
+# janela usada na média de referência (último candle vs média dos N)
+_MEDIA_N = 15
+# zona-morta (% do preço) abaixo da qual a tendência é considerada "lateral"
+_LATERAL_PCT = 0.0003  # 0,03%
+
 
 def _val(v):
     if isinstance(v, Decimal):
@@ -43,6 +48,7 @@ class MarketPriceRule:
         for r in rows:
             tipo  = r.get("type")
             close = _val(r.get("close"))
+            media_15, delta_15, tendencia = MarketPriceRule._stats(r.get("id_symbols"))
             data.append({
                 "id_symbols": r.get("id_symbols"),
                 "type":       tipo,
@@ -54,8 +60,41 @@ class MarketPriceRule:
                 "low":        _val(r.get("low")),
                 "close":      close,
                 "preco":      round(close) if close is not None else None,
+                "media_15":   media_15,
+                "delta_15":   delta_15,
+                "tendencia":  tendencia,
                 "tick_vol":   r.get("tick_vol"),
                 "vol":        r.get("vol"),
             })
 
         return {"data": data}, 200
+
+    @staticmethod
+    def _stats(id_symbols, n=_MEDIA_N):
+        """Média dos últimos N closes, delta (atual - média) em pontos e tendência.
+
+        delta > 0  → preço acima da média (alta)
+        delta < 0  → preço abaixo da média (baixa)
+        |delta| dentro da zona-morta (_LATERAL_PCT do preço) → lateral
+        """
+        rows = MySql().fetch(
+            "SELECT close FROM mt5_candles WHERE id_symbols=%s "
+            "ORDER BY `datetime` DESC LIMIT %s",
+            (id_symbols, n)
+        ) or []
+        closes = [float(r["close"]) for r in rows if r.get("close") is not None]
+        if len(closes) < 2:
+            return None, None, None
+
+        atual = closes[0]
+        media = sum(closes) / len(closes)
+        delta = atual - media
+
+        if abs(delta) <= media * _LATERAL_PCT:
+            tendencia = "lateral"
+        elif delta > 0:
+            tendencia = "alta"
+        else:
+            tendencia = "baixa"
+
+        return round(media), round(delta), tendencia

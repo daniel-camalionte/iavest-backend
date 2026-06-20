@@ -225,7 +225,7 @@
       "get": {
         "tags": ["Market Analysis"],
         "summary": "Preço de mercado ao vivo (MT5)",
-        "description": "Retorna o último candle (mt5_candles) de cada símbolo, com nome amigável. Campo 'preco' = close arredondado (mesma fonte do preco_mercado do simulador). Use 'datetime' para indicar o frescor do dado no front.",
+        "description": "Retorna o último candle (mt5_candles) de cada símbolo, com nome amigável. Campo 'preco' = close arredondado (mesma fonte do preco_mercado do simulador). Inclui 'media_15' (média dos últimos 15 closes), 'delta_15' (atual - média, em pontos: positivo = acima da média/alta, negativo = abaixo/baixa) e 'tendencia' (alta/baixa/lateral). Use 'datetime' para indicar o frescor do dado no front.",
         "produces": ["application/json"],
         "parameters": [
           {
@@ -244,7 +244,7 @@
           }
         ],
         "responses": {
-          "200": { "description": "Lista de preços por símbolo. Ex: { \"data\": [ { \"id_symbols\": 1, \"type\": \"WIN\", \"ticker\": \"WINM223\", \"nome\": \"Mini Índice\", \"datetime\": \"2026-06-18 18:24:00\", \"open\": 170755.5, \"high\": 170785.5, \"low\": 170740.5, \"close\": 170755.5, \"preco\": 170756, \"tick_vol\": 190, \"vol\": 1194 } ] }" },
+          "200": { "description": "Lista de preços por símbolo. Ex: { \"data\": [ { \"id_symbols\": 1, \"type\": \"WIN\", \"ticker\": \"WINM223\", \"nome\": \"Mini Índice\", \"datetime\": \"2026-06-19 12:30:00\", \"open\": 171635.5, \"high\": 171650.5, \"low\": 171620.5, \"close\": 171640.0, \"preco\": 171640, \"media_15\": 171639, \"delta_15\": 1, \"tendencia\": \"lateral\", \"tick_vol\": 190, \"vol\": 1194 } ] }" },
           "401": { "description": "Token inválido ou ausente" }
         }
       }
