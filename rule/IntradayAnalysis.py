@@ -54,7 +54,7 @@ Contexto do ativo:
 
 Referências de contexto do dia (use obrigatoriamente na análise):
 - prev_day_high/low/close: níveis estruturais do dia anterior. Preço acima de prev_day_high é breakout bullish; abaixo de prev_day_low é breakout bearish.
-- opening_range_high/low: máxima e mínima dos primeiros 30min (09:00–09:30). Rompimento acima do OR é sinal de compra; abaixo é sinal de venda. Preço dentro do OR = indefinição.
+- opening_range_high/low: máxima e mínima dos primeiros 30min (09:00–09:30). Rompimento acima do OR é sinal de compra; abaixo é sinal de venda. Preço dentro do OR = indefinição. IMPORTANTE: quando preco_vs_or = dentro_do_opening_range, prefira FORTEMENTE "neutro" — o miolo do range é lateralização e historicamente tem baixa taxa de acerto (backtest: ~38% dentro do range vs ~56% em rompimento). Só assuma direção com rompimento confirmado.
 - dolfut_proxy: USD/BRL tem correlação INVERSA com WIN. impacto_win=bearish significa dólar subindo → pressão vendedora no WIN. impacto_win=bullish significa dólar caindo → pressão compradora no WIN. impacto_win=neutro significa dólar praticamente de lado (variação irrelevante) → NÃO use o dólar como confluência nem como risco; trate-o como fator ausente. Atenção: o dólar é apenas um fator de contexto fraco — não o use como motivo principal de uma decisão.
 - bova11_volume: volume real do ETF BOVA11 (mesma bolsa B3, mesmos horários). vol_rel compara o candle atual com a média dos últimos 20. vol_rel > 1.5 = movimento com convicção; vol_rel < 0.5 = movimento fraco, não confiar em rompimentos.
 - indicadores_5min: mesmo ativo no timeframe de 5min. Use para confirmar ou questionar o sinal do 15min. tf5_alinhamento=alinhado_compra/venda = sinal forte; conflitante = cautela extra.
@@ -560,7 +560,12 @@ class IntradayAnalysisRule:
             or_low  = int(or_row[0].get("or_low"))
         else:
             _or_h, _or_l = _opening_range(win_1m, now_br)
-            if _or_h is not None:
+            # Só PERSISTE o OR depois que a janela de abertura fechou (>= 09:30 BRT).
+            # Antes disso o range está incompleto (só os primeiros candles) — cachear
+            # aqui congela um OR parcial/errado o dia todo. Antes das 09:30 usa-se o
+            # valor provisório apenas para exibição, sem gravar.
+            _or_fechado = (now_br.hour * 100 + now_br.minute) >= 930
+            if _or_h is not None and _or_fechado:
                 try:
                     IntradayORModel().save({
                         "id_ativos_base": id_ativos_base,
@@ -736,6 +741,28 @@ class IntradayAnalysisRule:
                 _riscos = [_nota]
             ai["ai_riscos"] = _riscos
             ai["ai_resumo"] = "Neutro — venda suprimida por exaustão (volume fraco + MACD divergente)."
+
+        # 7a-bis. Filtro de chop (opening range) — suprime sinal direcional nascido
+        # DENTRO do opening range. Backtest (jun/26, 69 sinais resolvidos): sinais no
+        # miolo do range acertam 9/24 = 38% vs 14/25 = 56% em rompimento alinhado. O
+        # range é lateralização e drena o resultado. Override determinístico p/ "neutro".
+        # (Roda antes da contra-tendência para não moderar um sinal que já será anulado.)
+        if (ai_direcao in ("compra", "venda")
+                and preco_vs_or == "dentro_do_opening_range"):
+            ai_direcao        = "neutro"
+            ai["ai_direcao"]  = "neutro"
+            _nota = (
+                "Sinal suprimido pelo filtro de chop: preço dentro do opening range "
+                "(lateralização). Sinais no miolo do range têm baixa taxa de acerto "
+                "histórica — aguardar rompimento confirmado do OR."
+            )
+            _riscos = ai.get("ai_riscos")
+            if isinstance(_riscos, list):
+                _riscos.append(_nota)
+            else:
+                _riscos = [_nota]
+            ai["ai_riscos"] = _riscos
+            ai["ai_resumo"] = "Neutro — sinal suprimido por chop (preço dentro do opening range)."
 
         # 7b. Confluência de timeframes — modera sinal CONTRA a tendência do dia.
         # Se a direção contradiz o viés do fundamental e a confiança diária é ALTA,
