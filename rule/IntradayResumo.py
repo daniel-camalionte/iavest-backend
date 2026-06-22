@@ -78,7 +78,11 @@ class IntradayResumoRule:
                 "net_pts":       net,
                 "net_reais":     round(net * PONTO_REAIS, 2),
                 "profit_factor": profit_factor,      # ganhos / |perdas|
-                "maior_ganho_pts": _i(r.get("maior_ganho")),
-                "maior_perda_pts": _i(r.get("maior_perda")),
+                "ganhos_reais":  round(ganhos * PONTO_REAIS, 2),
+                "perdas_reais":  round(perdas * PONTO_REAIS, 2),
+                "maior_ganho_pts":   _i(r.get("maior_ganho")),
+                "maior_ganho_reais": round(_i(r.get("maior_ganho")) * PONTO_REAIS, 2),
+                "maior_perda_pts":   _i(r.get("maior_perda")),
+                "maior_perda_reais": round(_i(r.get("maior_perda")) * PONTO_REAIS, 2),
             },
         }, 200
