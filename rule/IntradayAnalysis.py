@@ -723,6 +723,7 @@ class IntradayAnalysisRule:
         atr          = ind.get("win_atr") or 300
         ai_direcao   = ai.get("ai_direcao", "neutro")
         ai_stop_loss = ai.get("ai_stop_loss")
+        vies         = None  # direção original quando um filtro suprime p/ neutro (chop)
 
         # 7a. Filtro de exaustão — suprime VENDA de baixa convicção.
         # Rompimento de baixa com volume fraco (vol_rel < threshold) e MACD
@@ -757,6 +758,7 @@ class IntradayAnalysisRule:
         # (Roda antes da contra-tendência para não moderar um sinal que já será anulado.)
         if (ai_direcao in ("compra", "venda")
                 and preco_vs_or == "dentro_do_opening_range"):
+            vies              = ai_direcao   # guarda o lado original (viés fraco)
             ai_direcao        = "neutro"
             ai["ai_direcao"]  = "neutro"
             _nota = (
@@ -875,6 +877,7 @@ class IntradayAnalysisRule:
             "bova11_vol_rel":     bova11.get("vol_rel")    if bova11 else None,
             "bova11_vol_nivel":   bova11.get("nivel")      if bova11 else None,
             "ai_direcao":         ai.get("ai_direcao", "neutro"),
+            "vies":               vies,
             "ai_forca":           ai.get("ai_forca"),
             "ai_confianca":       ai.get("ai_confianca"),
             "contra_tendencia":   contra_tendencia,
