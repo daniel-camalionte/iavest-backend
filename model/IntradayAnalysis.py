@@ -62,7 +62,6 @@ class IntradayAnalysisModel(BaseModel):
             "bova11_vol_nivel":     "bova11_vol_nivel",
 
             "ai_direcao":           "ai_direcao",
-            "vies":                 "vies",
             "ai_forca":             "ai_forca",
             "ai_confianca":         "ai_confianca",
             "contra_tendencia":     "contra_tendencia",
