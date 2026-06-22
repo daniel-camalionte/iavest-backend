@@ -15,19 +15,19 @@ def _now_str():
 
 
 def _parse_dt(v):
-    """Aceita datetime ou string ('YYYY-MM-DD HH:MM:SS' ou ISO com 'T')."""
+    """Aceita datetime ou string ('YYYY-MM-DD HH:MM:SS', 'YYYY-MM-DD HH:MM',
+    'YYYY-MM-DD' ou ISO com 'T')."""
     if v is None:
         return None
     if isinstance(v, datetime):
         return v.replace(tzinfo=None) if v.tzinfo else v
-    s = str(v)[:19].replace("T", " ")
-    try:
-        return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
-    except Exception:
+    s = str(v).replace("T", " ").strip()
+    for fmt, n in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d %H:%M", 16), ("%Y-%m-%d", 10)):
         try:
-            return datetime.strptime(str(v)[:10], "%Y-%m-%d")
+            return datetime.strptime(s[:n], fmt)
         except Exception:
-            return None
+            continue
+    return None
 
 
 def _dt_in(v):
