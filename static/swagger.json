@@ -2361,6 +2361,35 @@
         }
       }
     },
+    "/market/intraday/resumo": {
+      "get": {
+        "tags": ["Intraday Analysis"],
+        "summary": "Resumo agregado do dia (P&L, taxa, profit factor)",
+        "description": "Agrega on-demand os sinais intraday de um dia (por id_market_analysis) — fonte única de verdade. O front só exibe. Pontos via resultado_pontos (exit-based). Taxa de acerto sobre direcionais (favor/(favor+contra)), excluindo neutros.",
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "type": "string",
+            "default": "Bearer "
+          },
+          {
+            "name": "id_market_analysis",
+            "in": "query",
+            "required": true,
+            "type": "integer",
+            "description": "ID da análise fundamentalista do dia"
+          }
+        ],
+        "responses": {
+          "200": { "description": "Resumo do dia. Ex: { \"id_market_analysis\": 15, \"total_sinais\": 36, \"pendentes\": 0, \"resumo\": { \"neutro\": 22, \"alvo\": 4, \"stop\": 5, \"expirado\": 5, \"direcionais\": 14, \"acerto\": 7, \"erro\": 7, \"taxa_acerto\": 50, \"ganhos_pts\": 550, \"perdas_pts\": -857, \"net_pts\": -307, \"net_reais\": -61.4, \"profit_factor\": 0.64, \"maior_ganho_pts\": 255, \"maior_perda_pts\": -300 } }" },
+          "400": { "description": "id_market_analysis ausente ou inválido" },
+          "401": { "description": "Token inválido ou ausente" }
+        }
+      }
+    },
     "/market/intraday/list": {
       "get": {
         "tags": ["Intraday Analysis"],

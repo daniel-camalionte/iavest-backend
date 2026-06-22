@@ -5,6 +5,7 @@ from flask_jwt_extended import jwt_required
 from rule.MarketAnalysis import MarketAnalysisRule, MarketAnalysisListRule, MarketAnalysisDetailRule
 from rule.MarketPrice import MarketPriceRule
 from rule.IntradayAnalysis import IntradayAnalysisRule, IntradayAnalysisLatestRule, IntradayAnalysisListRule, IntradayHealthRule
+from rule.IntradayResumo import IntradayResumoRule
 from library.YahooFinanceClient import YahooFinanceClient
 from library.HttpClient import HttpClient
 from library.SchedulerAuth import check_scheduler_auth
@@ -260,6 +261,24 @@ class IntradayAnalysisLatestController(MethodView):
             id_ativos_base = None
 
         return IntradayAnalysisLatestRule.latest(id_ativos_base=id_ativos_base)
+
+
+class IntradayResumoController(MethodView):
+    """GET /market/intraday/resumo?id_market_analysis=X — resumo agregado do dia
+    (net pts, profit factor, taxa de acerto direcional, contagens). Fonte única
+    de verdade — o front só exibe."""
+
+    @jwt_required
+    def get(self):
+        try:
+            id_market_analysis = int(request.args.get("id_market_analysis", 0))
+        except (TypeError, ValueError):
+            return {"error": "Parâmetro 'id_market_analysis' deve ser inteiro"}, 400
+
+        if not id_market_analysis:
+            return {"error": "Parâmetro 'id_market_analysis' é obrigatório"}, 400
+
+        return IntradayResumoRule.resumo(id_market_analysis)
 
 
 class IntradayAnalysisListController(MethodView):

@@ -161,6 +161,7 @@ api.add_resource(appController.IntradayResolvePendingController, '/market/intrad
 api.add_resource(appController.IntradayHealthController, '/market/intraday/health')
 api.add_resource(appController.IntradayAnalysisLatestController, '/market/intraday/latest')
 api.add_resource(appController.IntradayAnalysisListController, '/market/intraday/list')
+api.add_resource(appController.IntradayResumoController, '/market/intraday/resumo')
 
 #Simulador de Ordens
 api.add_resource(appController.SimuladorOrdemListaController, '/simulador/ordem')
