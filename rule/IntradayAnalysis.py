@@ -187,14 +187,15 @@ def _ema_crossover(candles_asc, fast=9, slow=21):
 
 def _avaliar_resultado(prev, candles_asc, now_br):
     """Avalia se a análise anterior atingiu stop, alvo ou expirou.
-    Retorna (resultado, resultado_preco, resultado_direcao)."""
+    Retorna (resultado, resultado_preco, resultado_direcao, resultado_pontos).
+    resultado_pontos = (saída - entrada) na direção do trade (exit-based)."""
     direcao = prev.get("ai_direcao")
     stop    = prev.get("ai_stop_loss")
     alvo_1  = prev.get("ai_alvo_1")
     alvo_2  = prev.get("ai_alvo_2")
 
     if direcao == "neutro" or not stop or not alvo_1:
-        return "neutro", None, None
+        return "neutro", None, None, None
 
     prev_candle_at = prev.get("candle_datetime")
     if isinstance(prev_candle_at, str):
@@ -202,49 +203,55 @@ def _avaliar_resultado(prev, candles_asc, now_br):
     elif prev_candle_at:
         prev_dt = prev_candle_at if prev_candle_at.tzinfo else prev_candle_at.replace(tzinfo=BRASILIA)
     else:
-        return None, None, None
+        return None, None, None, None
 
     post_candles = [
         c for c in candles_asc
         if datetime.fromtimestamp(c["datetime"], tz=BRASILIA) > prev_dt
     ]
     if not post_candles:
-        return None, None, None
+        return None, None, None, None
+
+    # Entrada (com fallback para o candle de entrada se win_price não estiver no registro)
+    entrada = prev.get("win_price")
+    if entrada is None:
+        entry_candles = [c for c in candles_asc
+                         if datetime.fromtimestamp(c["datetime"], tz=BRASILIA) <= prev_dt]
+        entrada = round(entry_candles[-1]["close"]) if entry_candles else None
+    entrada = round(float(entrada)) if entrada is not None else None
+
+    def _pts(saida):
+        """Pontos do trade (exit-based): + a favor, - contra."""
+        if entrada is None or saida is None:
+            return None
+        return round((saida - entrada) if direcao == "compra" else (entrada - saida))
 
     for c in post_candles:
         if direcao == "compra":
             if c["low"] <= stop:
-                return "stop_atingido", round(stop), "contra"
+                return "stop_atingido", round(stop), "contra", _pts(round(stop))
             if alvo_2 and c["high"] >= alvo_2:
-                return "alvo_2_atingido", round(alvo_2), "favor"
+                return "alvo_2_atingido", round(alvo_2), "favor", _pts(round(alvo_2))
             if c["high"] >= alvo_1:
-                return "alvo_1_atingido", round(alvo_1), "favor"
+                return "alvo_1_atingido", round(alvo_1), "favor", _pts(round(alvo_1))
         elif direcao == "venda":
             if c["high"] >= stop:
-                return "stop_atingido", round(stop), "contra"
+                return "stop_atingido", round(stop), "contra", _pts(round(stop))
             if alvo_2 and c["low"] <= alvo_2:
-                return "alvo_2_atingido", round(alvo_2), "favor"
+                return "alvo_2_atingido", round(alvo_2), "favor", _pts(round(alvo_2))
             if c["low"] <= alvo_1:
-                return "alvo_1_atingido", round(alvo_1), "favor"
+                return "alvo_1_atingido", round(alvo_1), "favor", _pts(round(alvo_1))
 
-    last_close        = round(post_candles[-1]["close"])
-    win_price_inicial = prev.get("win_price")
-
-    # Fallback: se win_price não estiver no registro, deriva do candle de entrada
-    if win_price_inicial is None:
-        entry_candles = [c for c in candles_asc
-                         if datetime.fromtimestamp(c["datetime"], tz=BRASILIA) <= prev_dt]
-        win_price_inicial = round(entry_candles[-1]["close"]) if entry_candles else None
-
-    if win_price_inicial is not None:
-        diff = last_close - round(float(win_price_inicial))
+    last_close = round(post_candles[-1]["close"])
+    if entrada is not None:
+        diff = last_close - entrada
         if direcao == "compra":
             direcao_res = "favor" if diff > 0 else "contra" if diff < 0 else "neutro"
         else:
             direcao_res = "favor" if diff < 0 else "contra" if diff > 0 else "neutro"
     else:
         direcao_res = "neutro"
-    return "expirado", last_close, direcao_res
+    return "expirado", last_close, direcao_res, _pts(last_close)
 
 
 def _tf_alinhamento(ema15, ema5):
@@ -516,13 +523,14 @@ class IntradayAnalysisRule:
         )
         if prev_rows and prev_rows[0].get("resultado") is None:
             prev_rec = prev_rows[0]
-            res_val, res_preco, res_direcao = _avaliar_resultado(prev_rec, candles, now_br)
+            res_val, res_preco, res_direcao, res_pontos = _avaliar_resultado(prev_rec, candles, now_br)
             if res_val:
                 IntradayAnalysisModel().update({
                     "resultado":          res_val,
                     "resultado_preco":    res_preco,
                     "resultado_at":       now_br.strftime("%Y-%m-%d %H:%M:%S"),
                     "resultado_direcao":  res_direcao,
+                    "resultado_pontos":   res_pontos,
                 }, prev_rec.get("id_intraday_analysis"))
 
         # 3. Indicadores + níveis do dia
@@ -904,6 +912,7 @@ class IntradayAnalysisRule:
         result["resultado_preco"]    = None
         result["resultado_at"]       = None
         result["resultado_direcao"]  = None
+        result["resultado_pontos"]   = None
         result.pop("payload_json", None)
         for field in ("ai_confluencias", "ai_riscos"):
             val = result.get(field)
@@ -954,7 +963,7 @@ class IntradayAnalysisRule:
             if not day_1m:
                 continue
             day_candles = _aggregate_candles(day_1m, interval)
-            res_val, res_preco, res_dir = _avaliar_resultado(rec, day_candles, now_br)
+            res_val, res_preco, res_dir, res_pontos = _avaliar_resultado(rec, day_candles, now_br)
             if not res_val:
                 continue
             IntradayAnalysisModel().update({
@@ -962,6 +971,7 @@ class IntradayAnalysisRule:
                 "resultado_preco":   res_preco,
                 "resultado_at":      now_br.strftime("%Y-%m-%d %H:%M:%S"),
                 "resultado_direcao": res_dir,
+                "resultado_pontos":  res_pontos,
             }, rec.get("id_intraday_analysis"))
             resolved.append({
                 "id":                rec.get("id_intraday_analysis"),
