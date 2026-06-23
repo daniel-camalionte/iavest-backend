@@ -6,22 +6,26 @@ Filosofia: o sinal intraday (analysis_intraday) JÁ é a inteligência (Haiku a 
 entra com STOP CURTO FIXO (controla risco/trade), segura cavalgando a tendência, e
 encerra por stop/flip/fim-de-dia. Determinístico, robusto, idempotente.
 
-v1: stop curto fixo (100pts), SEM trailing (deixa o vencedor correr). Trailing
-(trail50) existe no código mas não é chamado — fica pra um v2 se o dado pedir.
+v2: 100% dados da IA. Entra com o STOP da IA (ai_stop_loss; fallback fixo 100 se vier
+do lado errado da entrada). Os ALVOS do intraday (ai_alvo_1/2) NÃO são TP fixo — são
+gatilhos: ao bater alvo1 (e depois alvo2) o Haiku é acionado p/ recalcular e PROTEGER o
+capital subindo o stop (mín. breakeven). O Haiku deixou de rodar a cada tick.
 
-Fluxo (chamado pelo schedule a cada ~5min):
+Fluxo (chamado pelo schedule a cada ~1min):
   processar() →
-    1. guarda-corpo: se há posição, checa stop fixo / flip / fim de dia
-    2. cérebro: usa o último sinal intraday p/ abrir (1 entrada por sinal)
-    3. devolve o contrato pro MT5 (status, acao, entrada, stop)
+    1. guarda-corpo: se há posição, checa reconciliação / fim de dia / flip / stop
+    2. proteção: ao bater alvo1/alvo2, Haiku recalcula e sobe o stop
+    3. cérebro: usa o último sinal intraday p/ abrir (1 entrada por sinal)
+    4. devolve o contrato pro MT5 (status, acao, entrada, stop)
 
 Segurança: 'encerrar' é sempre afirmativo; erro NUNCA fecha por default.
 """
 import json
+from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 
 import config.env as memory
-from library.MySql import MySql
+from library.MySql import MySql, _direct_connect
 from library.HttpClient import HttpClient
 from model.ClaudeTrader import ClaudeTraderModel, ClaudeTraderLogModel, ClaudeTraderAnaliseModel
 from model.IntradayAnalysis import IntradayAnalysisModel
@@ -36,7 +40,7 @@ STOP_CURTO_PTS  = 100           # stop inicial CURTO fixo (controla risco/trade)
                                 # stop variável do Haiku (que era largo demais, até 505pts).
                                 # Valor conservador/raciocinado — calibrar com mais dado.
 TRAIL_PCT_PICO  = 0.5            # trail50: trava 50% do pico de lucro (entrada + pico*0.5)
-FIM_PREGAO_HHMM = 1750           # encerra posição a partir de 17:50 (sem overnight)
+FIM_PREGAO_HHMM = 1745           # encerra posição a partir de 17:45 (sem overnight)
 
 _IA_MODEL       = "claude-haiku-4-5"
 _IA_MAX_TOKENS  = 600
@@ -62,17 +66,23 @@ def _now():
 
 
 def _preco_atual(id_ativos_base=1):
-    """Último close do WIN no mt5_candles (preço de mercado)."""
+    """Último close do WIN no mt5_candles (preço de mercado) — SÓ candle de HOJE.
+    Sem candle de hoje (feed caiu / fora de pregão) → None → processar não opera."""
     symbol = _ATIVO_SYMBOL.get(id_ativos_base, id_ativos_base)
+    hoje = _now().strftime("%Y-%m-%d")
     rows = MySql().fetch(
-        "SELECT close FROM mt5_candles WHERE id_symbols=%s ORDER BY `datetime` DESC LIMIT 1",
-        (symbol,)) or []
+        "SELECT close FROM mt5_candles WHERE id_symbols=%s AND `datetime` >= %s "
+        "ORDER BY `datetime` DESC LIMIT 1",
+        (symbol, hoje + " 00:00:00")) or []
     return round(float(rows[0]["close"])) if rows else None
 
 
 def _ultimo_sinal(id_ativos_base=1):
+    """Último sinal intraday — SÓ de HOJE. Nunca abre/decide por sinal de ontem."""
+    hoje = _now().strftime("%Y-%m-%d")
     r = (IntradayAnalysisModel()
          .where(["id_ativos_base", "=", id_ativos_base])
+         .where(["candle_datetime", ">=", hoje + " 00:00:00"])
          .order("candle_datetime", "DESC").limit(1).find())
     return r[0] if r else None
 
@@ -82,6 +92,34 @@ def _market_analysis_id(id_ativos_base=1):
          .where(["id_ativos_base", "=", id_ativos_base])
          .order("analyzed_at", "DESC").limit(1).find())
     return r[0]["id_market_analysis"] if r else None
+
+
+@contextmanager
+def _lock_operacao(id_ativos_base, account_number, timeout=8):
+    """Serializa o processar() por (ativo, conta) com um advisory lock do MySQL.
+
+    GET_LOCK é por CONEXÃO: mantemos UMA conexão dedicada aberta durante toda a
+    seção crítica — não dá pra usar o pool (MySql fecha a conexão a cada query, o
+    que devolveria o lock). Impede a corrida lê(SELECT 'aberta')/escreve(INSERT)
+    que, sob duas chamadas simultâneas, abriria 2 posições ao mesmo tempo.
+    Faz yield True se conseguiu o lock; False se outra execução já o detém.
+    """
+    nome = "claude_trader_oper_%s_%s" % (id_ativos_base, account_number or "_")
+    conn = _direct_connect()
+    got = False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT GET_LOCK(%s, %s) AS got", (nome, timeout))
+            row = cur.fetchone()
+        got = bool(row and row.get("got") == 1)
+        yield got
+    finally:
+        try:
+            if got:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT RELEASE_LOCK(%s)", (nome,))
+        finally:
+            conn.close()
 
 
 class ClaudeTraderRule:
@@ -94,14 +132,24 @@ class ClaudeTraderRule:
         if preco is None:
             return {"error": "Sem preço (mt5_candles)"}, 502
 
-        op = ClaudeTraderRule._operacao_aberta(id_ativos_base, account_number)
+        # LOCK: serializa execuções concorrentes do mesmo (ativo, conta). Sem ele,
+        # duas chamadas simultâneas a /equalizar poderiam ambas ler "sem posição"
+        # e ambas abrir → 2 posições ativas ao mesmo tempo.
+        with _lock_operacao(id_ativos_base, account_number) as locked:
+            if not locked:
+                # outra execução já está processando este ativo/conta agora:
+                # não mexe, só devolve o estado atual pro MT5.
+                op = ClaudeTraderRule._operacao_aberta(id_ativos_base, account_number)
+                return ClaudeTraderRule._contrato_mt5(op), 200
 
-        if op:
-            ClaudeTraderRule._gerir(op, preco, id_ativos_base)
-            op = ClaudeTraderRule._buscar(op["id_operacao"])  # recarrega estado
-        else:
-            ClaudeTraderRule._talvez_abrir(id_ativos_base, account_number, preco)
             op = ClaudeTraderRule._operacao_aberta(id_ativos_base, account_number)
+
+            if op:
+                ClaudeTraderRule._gerir(op, preco, id_ativos_base)
+                op = ClaudeTraderRule._buscar(op["id_operacao"])  # recarrega estado
+            else:
+                ClaudeTraderRule._talvez_abrir(id_ativos_base, account_number, preco)
+                op = ClaudeTraderRule._operacao_aberta(id_ativos_base, account_number)
 
         return ClaudeTraderRule._contrato_mt5(op), 200
 
@@ -127,13 +175,20 @@ class ClaudeTraderRule:
 
         tipo = "buy" if direcao == "compra" else "sell"
 
-        # STOP CURTO FIXO (relativo à entrada real) — controla o risco por trade.
-        # Backtest: stop fixo curto + trail50 é mais robusto que o stop largo do Haiku
-        # (positivo em 5/7 dias e +881 mesmo sem o melhor dia).
-        stop = (preco - STOP_CURTO_PTS) if tipo == "buy" else (preco + STOP_CURTO_PTS)
+        # V2: STOP DA IA (ai_stop_loss absoluto). Se vier do lado errado da entrada real
+        # (lag: a IA calcula o stop no preço do candle e a entrada é a mercado ~min depois)
+        # ou ausente → fallback no stop curto fixo de 100pts.
+        ai_stop = sinal.get("ai_stop_loss")
+        if ai_stop and ((tipo == "buy" and ai_stop < preco) or (tipo == "sell" and ai_stop > preco)):
+            stop = int(ai_stop)
+            origem_stop = "ia"
+        else:
+            stop = (preco - STOP_CURTO_PTS) if tipo == "buy" else (preco + STOP_CURTO_PTS)
+            origem_stop = "fallback_100"
 
-        # trail50: SEM alvo fixo — cavalga com o stop móvel (trava 50% do pico de lucro)
-        gain = None
+        # Alvos da IA: gatilhos de PROTEÇÃO (acionam o Haiku), NÃO take-profit fixo no MT5.
+        alvo_1 = int(sinal["ai_alvo_1"]) if sinal.get("ai_alvo_1") else None
+        alvo_2 = int(sinal["ai_alvo_2"]) if sinal.get("ai_alvo_2") else None
 
         novo = ClaudeTraderModel().save({
             "id_ativos_base":     id_ativos_base,
@@ -145,23 +200,39 @@ class ClaudeTraderRule:
             "preco_entrada":      preco,
             "stop_inicial":       int(stop),
             "stop_loss":          int(stop),
-            "stop_gain":          int(gain) if gain else None,
+            "stop_gain":          None,        # sem TP fixo — o alvo gere proteção, não fecha
+            "alvo_1":             alvo_1,
+            "alvo_2":             alvo_2,
+            "protegido_nivel":    0,
             "status":             "aberta",
             "acao_mt5":           "abrir",
             "modo":               "real",
             "abertura_em":        _now().strftime("%Y-%m-%d %H:%M:%S"),
             "mfe_pontos":         0,
             "mae_pontos":         0,
-            "motivo":             "Abertura: sinal intraday %s (rompimento)" % direcao,
+            "motivo":             "Abertura: sinal %s | stop %s (%s) alvo1 %s alvo2 %s"
+                                  % (direcao, int(stop), origem_stop, alvo_1, alvo_2),
         })
         ClaudeTraderRule._log(novo, "abertura", "cerebro", preco, None, int(stop),
-                              "Abre %s @ %s, stop %s" % (tipo, preco, int(stop)))
+                              "Abre %s @ %s, stop %s (%s), alvo1 %s alvo2 %s"
+                              % (tipo, preco, int(stop), origem_stop, alvo_1, alvo_2))
 
     # ------------------------------------------------------------------ GESTÃO
     @staticmethod
     def _gerir(op, preco, id_ativos_base):
-        """Posição aberta: fim de dia / flip / stop / trailing."""
+        """Posição aberta: reconciliação / fim de dia / flip / stop / trailing."""
         tipo = op["tipo_posicao"]
+
+        # 0. RECONCILIAÇÃO: posição que sobrou de um dia anterior (o encerramento de
+        # fim de pregão não rodou naquele dia, ex.: schedule fora do ar). Encerra agora
+        # e emite a ordem pro MT5 — garante o flat e não gerencia posição velha como se
+        # fosse de hoje. Tem precedência sobre tudo.
+        hoje = _now().strftime("%Y-%m-%d")
+        abertura = str(op.get("abertura_em") or "")[:10]
+        if abertura and abertura < hoje:
+            return ClaudeTraderRule._encerrar(op, preco, "fim_dia",
+                                              "Posição de dia anterior — encerra (reconciliação)")
+
         # atualiza MFE/MAE (para análise)
         ClaudeTraderRule._atualiza_excursao(op, preco)
 
@@ -182,40 +253,53 @@ class ClaudeTraderRule:
            (tipo == "sell" and preco >= op["stop_loss"]):
             return ClaudeTraderRule._encerrar(op, op["stop_loss"], "stop", "Stop atingido")
 
-        # 4. SEM trailing mecânico. Mas: se está EM LUCRO, a cada sinal intraday novo (15min)
-        # consulta a IA (Haiku) p/ decidir manter / ajustar (recalibrar stop) / encerrar.
-        # Decisão pura da IA — registrada em claude_trader_analise pra avaliar depois.
-        fav = (preco - op["preco_entrada"]) if tipo == "buy" else (op["preco_entrada"] - preco)
-        if fav > 0 and ClaudeTraderRule._analise_ia(op, preco, fav):
-            return  # IA tratou (encerrou / ajustou)
+        # 4. V2: proteção acionada por ALVO. O Haiku NÃO roda mais a cada tick — só quando o
+        # preço atinge o alvo1 (e depois o alvo2) do intraday. Aí recalcula e PROTEGE o
+        # capital subindo o stop. protegido_nivel evita reacionar no mesmo alvo.
+        nivel = op.get("protegido_nivel") or 0
+        alvo_1 = op.get("alvo_1")
+        alvo_2 = op.get("alvo_2")
+
+        def _hit(alvo):
+            return alvo and ((tipo == "buy" and preco >= alvo) or (tipo == "sell" and preco <= alvo))
+
+        alvo_nivel = 2 if _hit(alvo_2) else (1 if _hit(alvo_1) else 0)
+        if alvo_nivel > nivel:
+            return ClaudeTraderRule._proteger_no_alvo(op, preco, alvo_nivel)
+
         ClaudeTraderModel().update({"acao_mt5": "manter"}, op["id_operacao"])
 
-    # ------------------------------------------------------------------ CÉREBRO IA (15min, no lucro)
+    # ------------------------------------------------------------- PROTEÇÃO NO ALVO (Haiku)
     @staticmethod
-    def _analise_ia(op, preco, fav):
-        """Consulta o Haiku 1x por sinal intraday (15min), quando a posição está no lucro.
-        Acata: encerrar / ajustar (move stop) / manter. Registra tudo em claude_trader_analise.
-        Retorna True se agiu (encerrou/ajustou), False caso contrário (segue mecânico)."""
+    def _proteger_no_alvo(op, preco, alvo_nivel):
+        """V2: acionado quando o preço bate alvo1/alvo2 do intraday. Chama o Haiku p/
+        recalcular e PROTEGER o capital: sobe o stop (no MÍNIMO breakeven). Acata
+        encerrar; se o Haiku sugerir stop mais protetor, usa o mais apertado. Registra em
+        claude_trader_analise e marca protegido_nivel pra não reacionar no mesmo alvo."""
+        tipo = op["tipo_posicao"]
+        entrada = op["preco_entrada"]
+        atual = op["stop_loss"]
+        fav = (preco - entrada) if tipo == "buy" else (entrada - preco)
         sinal = _ultimo_sinal(op.get("id_ativos_base") or 1)
-        sid = sinal.get("id_intraday_analysis") if sinal else None
-        if not sid or ClaudeTraderRule._ja_analisou(op["id_operacao"], sid):
-            return False  # sem sinal novo → não chama (1 análise por sinal/15min)
+        sid = sinal.get("id_intraday_analysis") if sinal else op.get("id_intraday_origem")
 
-        contexto = ClaudeTraderRule._contexto_ia(op, preco, fav, sinal)
-        resp = ClaudeTraderRule._call_haiku(contexto)
-
+        resp = ClaudeTraderRule._call_haiku(ClaudeTraderRule._contexto_ia(op, preco, fav, sinal))
         rec = (resp or {}).get("recomendacao")
         novo_stop = (resp or {}).get("novo_stop")
-        acatado = 0
-        if resp and rec == "ajustar" and isinstance(novo_stop, (int, float)):
-            ns = int(novo_stop)
-            # só aplica se for proteção válida (lado certo, a favor)
-            tipo = op["tipo_posicao"]
-            if (tipo == "buy" and op["stop_loss"] < ns < preco) or \
-               (tipo == "sell" and preco < ns < op["stop_loss"]):
-                acatado = 1
 
-        # registra a análise (sempre — é o que vamos avaliar depois)
+        # stop protetor: no MÍNIMO breakeven (entrada). Se o Haiku sugerir um stop ainda
+        # mais protetor (lado certo, entre o atual e o preço), usa o mais apertado.
+        if tipo == "buy":
+            alvo_stop = max(int(entrada), int(atual))
+            if rec == "ajustar" and isinstance(novo_stop, (int, float)) and atual < int(novo_stop) < preco:
+                alvo_stop = max(alvo_stop, int(novo_stop))
+            aplicar = alvo_stop > atual
+        else:
+            alvo_stop = min(int(entrada), int(atual))
+            if rec == "ajustar" and isinstance(novo_stop, (int, float)) and preco < int(novo_stop) < atual:
+                alvo_stop = min(alvo_stop, int(novo_stop))
+            aplicar = alvo_stop < atual
+
         try:
             ClaudeTraderAnaliseModel().save({
                 "id_operacao":          op["id_operacao"],
@@ -223,26 +307,25 @@ class ClaudeTraderRule:
                 "preco_no_momento":     preco,
                 "lucro_pontos":         int(fav),
                 "recomendacao":         rec,
-                "stop_antes":           op["stop_loss"],
+                "stop_antes":           atual,
                 "stop_sugerido":        int(novo_stop) if isinstance(novo_stop, (int, float)) else None,
-                "acatado":              acatado if rec in ("ajustar", "encerrar") and resp else 0,
-                "motivo":               (resp or {}).get("motivo"),
+                "acatado":              1 if (rec in ("ajustar", "encerrar") and resp) else 0,
+                "motivo":               "ALVO%s | %s" % (alvo_nivel, (resp or {}).get("motivo")),
                 "analise_json":         json.dumps(resp, ensure_ascii=False) if resp else None,
                 "ia_disponivel":        1 if resp else 0,
             })
         except Exception:
             pass
 
-        if not resp:
-            return False  # IA falhou → segue mecânico (nunca encerra por falha)
+        # marca o nível protegido (sempre — pra não reacionar no mesmo alvo)
+        ClaudeTraderModel().update({"protegido_nivel": alvo_nivel}, op["id_operacao"])
 
-        if rec == "encerrar":
-            ClaudeTraderRule._encerrar(op, preco, "sinal_contrario", "IA: encerrar — " + str((resp or {}).get("motivo", "")))
-            return True
-        if rec == "ajustar" and acatado:
-            ClaudeTraderRule._mover_stop(op, int(novo_stop), preco)
-            return True
-        return False  # manter
+        if resp and rec == "encerrar":
+            return ClaudeTraderRule._encerrar(op, preco, "sinal_contrario",
+                                              "IA no alvo%s: encerrar — %s" % (alvo_nivel, (resp or {}).get("motivo", "")))
+        if aplicar:
+            return ClaudeTraderRule._mover_stop(op, alvo_stop, preco)
+        ClaudeTraderModel().update({"acao_mt5": "manter"}, op["id_operacao"])
 
     # ------------------------------------------------------------------ AÇÕES
     @staticmethod
