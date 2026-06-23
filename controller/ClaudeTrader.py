@@ -7,11 +7,12 @@ from model.ControllerError import ControllerError
 
 
 class ClaudeTraderEqualizarController(MethodView):
-    """GET /claude-trader/equalizar?id_ativos_base=1[&account_number=X]
+    """GET /claude-trader/equalizar?id_ativos_base=1[&id_estrategia=6]
 
-    Chamado pelo schedule (~5min). Roda a máquina de estado (guarda-corpo +
+    Chamado pelo schedule (~1min). Roda a máquina de estado (guarda-corpo +
     cérebro) e devolve o contrato pro MT5 executar (status/acao/entrada/stop/gain).
-    Requer header Authorization: <SCHEDULER_SECRET>.
+    A ordem é da ESTRATÉGIA (id_estrategia, default 6 = Claude Trader), não de um
+    cliente — todos copiam. Requer header Authorization: <SCHEDULER_SECRET>.
     """
 
     def get(self):
@@ -22,8 +23,11 @@ class ClaudeTraderEqualizarController(MethodView):
             id_ativos_base = int(request.args.get("id_ativos_base", 1))
         except (TypeError, ValueError):
             return {"error": "id_ativos_base deve ser inteiro"}, 400
-        account_number = request.args.get("account_number")
         try:
-            return ClaudeTraderRule.processar(id_ativos_base, account_number)
+            id_estrategia = int(request.args.get("id_estrategia", 6))
+        except (TypeError, ValueError):
+            return {"error": "id_estrategia deve ser inteiro"}, 400
+        try:
+            return ClaudeTraderRule.processar(id_ativos_base, id_estrategia)
         except Exception as e:
             return ControllerError().default(e), 500

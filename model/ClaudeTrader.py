@@ -16,7 +16,7 @@ class ClaudeTraderModel(BaseModel):
             "id_ativos_base":     "id_ativos_base",
             "id_market_analysis": "id_market_analysis",
             "id_intraday_origem": "id_intraday_origem",
-            "account_number":     "account_number",
+            "id_estrategia":      "id_estrategia",
             "tipo_posicao":       "tipo_posicao",
             "contratos":          "contratos",
             "preco_entrada":      "preco_entrada",

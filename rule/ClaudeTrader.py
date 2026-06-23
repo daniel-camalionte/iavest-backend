@@ -95,8 +95,8 @@ def _market_analysis_id(id_ativos_base=1):
 
 
 @contextmanager
-def _lock_operacao(id_ativos_base, account_number, timeout=8):
-    """Serializa o processar() por (ativo, conta) com um advisory lock do MySQL.
+def _lock_operacao(id_ativos_base, id_estrategia, timeout=8):
+    """Serializa o processar() por (ativo, estratégia) com um advisory lock do MySQL.
 
     GET_LOCK é por CONEXÃO: mantemos UMA conexão dedicada aberta durante toda a
     seção crítica — não dá pra usar o pool (MySql fecha a conexão a cada query, o
@@ -104,7 +104,7 @@ def _lock_operacao(id_ativos_base, account_number, timeout=8):
     que, sob duas chamadas simultâneas, abriria 2 posições ao mesmo tempo.
     Faz yield True se conseguiu o lock; False se outra execução já o detém.
     """
-    nome = "claude_trader_oper_%s_%s" % (id_ativos_base, account_number or "_")
+    nome = "claude_trader_oper_%s_%s" % (id_ativos_base, id_estrategia)
     conn = _direct_connect()
     got = False
     try:
@@ -126,36 +126,38 @@ class ClaudeTraderRule:
 
     # ------------------------------------------------------------------ API
     @staticmethod
-    def processar(id_ativos_base=1, account_number=None):
-        """Chamado pelo schedule (~5min). Gerência completa + devolve contrato MT5."""
+    def processar(id_ativos_base=1, id_estrategia=6):
+        """Chamado pelo schedule (~1min). Gerência completa + devolve contrato MT5.
+        id_estrategia (default 6 = Claude Trader): a ordem é da estratégia, não de
+        um cliente — todos copiam a mesma posição."""
         preco = _preco_atual(id_ativos_base)
         if preco is None:
             return {"error": "Sem preço (mt5_candles)"}, 502
 
-        # LOCK: serializa execuções concorrentes do mesmo (ativo, conta). Sem ele,
+        # LOCK: serializa execuções concorrentes do mesmo (ativo, estratégia). Sem ele,
         # duas chamadas simultâneas a /equalizar poderiam ambas ler "sem posição"
         # e ambas abrir → 2 posições ativas ao mesmo tempo.
-        with _lock_operacao(id_ativos_base, account_number) as locked:
+        with _lock_operacao(id_ativos_base, id_estrategia) as locked:
             if not locked:
-                # outra execução já está processando este ativo/conta agora:
+                # outra execução já está processando este ativo/estratégia agora:
                 # não mexe, só devolve o estado atual pro MT5.
-                op = ClaudeTraderRule._operacao_aberta(id_ativos_base, account_number)
+                op = ClaudeTraderRule._operacao_aberta(id_ativos_base, id_estrategia)
                 return ClaudeTraderRule._contrato_mt5(op), 200
 
-            op = ClaudeTraderRule._operacao_aberta(id_ativos_base, account_number)
+            op = ClaudeTraderRule._operacao_aberta(id_ativos_base, id_estrategia)
 
             if op:
                 ClaudeTraderRule._gerir(op, preco, id_ativos_base)
                 op = ClaudeTraderRule._buscar(op["id_operacao"])  # recarrega estado
             else:
-                ClaudeTraderRule._talvez_abrir(id_ativos_base, account_number, preco)
-                op = ClaudeTraderRule._operacao_aberta(id_ativos_base, account_number)
+                ClaudeTraderRule._talvez_abrir(id_ativos_base, id_estrategia, preco)
+                op = ClaudeTraderRule._operacao_aberta(id_ativos_base, id_estrategia)
 
         return ClaudeTraderRule._contrato_mt5(op), 200
 
     # ------------------------------------------------------------------ CÉREBRO
     @staticmethod
-    def _talvez_abrir(id_ativos_base, account_number, preco):
+    def _talvez_abrir(id_ativos_base, id_estrategia, preco):
         """Sem posição: abre se o último sinal intraday for direcional (1 entrada por sinal)."""
         sinal = _ultimo_sinal(id_ativos_base)
         if not sinal:
@@ -194,7 +196,7 @@ class ClaudeTraderRule:
             "id_ativos_base":     id_ativos_base,
             "id_market_analysis": _market_analysis_id(id_ativos_base),
             "id_intraday_origem": sinal.get("id_intraday_analysis"),
-            "account_number":     account_number,
+            "id_estrategia":      id_estrategia,
             "tipo_posicao":       tipo,
             "contratos":          1,
             "preco_entrada":      preco,
@@ -382,13 +384,14 @@ class ClaudeTraderRule:
 
     # ------------------------------------------------------------------ helpers
     @staticmethod
-    def _operacao_aberta(id_ativos_base, account_number):
-        m = (ClaudeTraderModel()
+    def _operacao_aberta(id_ativos_base, id_estrategia):
+        # id_estrategia sempre presente (default 6) → filtro sempre aplicado, sem o
+        # caso NULL inconsistente que existia com account_number.
+        r = (ClaudeTraderModel()
              .where(["id_ativos_base", "=", id_ativos_base])
-             .where(["status", "=", "aberta"]))
-        if account_number:
-            m.where(["account_number", "=", account_number])
-        r = m.order("id_operacao", "DESC").limit(1).find()
+             .where(["status", "=", "aberta"])
+             .where(["id_estrategia", "=", id_estrategia])
+             .order("id_operacao", "DESC").limit(1).find())
         return r[0] if r else None
 
     @staticmethod
