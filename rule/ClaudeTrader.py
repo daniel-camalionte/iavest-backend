@@ -26,7 +26,7 @@ PONTO_REAIS   = 0.20
 _ATIVO_SYMBOL = {1: 1}            # id_ativos_base -> id_symbols (mt5_candles)
 
 # --- parâmetros do v1 (todos configuráveis) ---
-TRAIL_R_MULT   = 1.0             # folga do trailing = 1R (move stop p/ topo - 1R)
+TRAIL_PCT_PICO  = 0.5            # trail50: trava 50% do pico de lucro (entrada + pico*0.5)
 FIM_PREGAO_HHMM = 1750           # encerra posição a partir de 17:50 (sem overnight)
 
 
@@ -100,7 +100,6 @@ class ClaudeTraderRule:
 
         tipo = "buy" if direcao == "compra" else "sell"
         stop = sinal.get("ai_stop_loss")
-        gain = sinal.get("ai_alvo_2") or sinal.get("ai_alvo_1")
         if not stop:
             return  # sem stop não opera
 
@@ -110,10 +109,8 @@ class ClaudeTraderRule:
         if tipo == "sell" and stop <= preco:
             stop = preco + 100
 
-        # alvo VELHO (já ficou pra trás da entrada real) → descarta, sai por stop/flip/fim_dia
-        if gain is not None:
-            if (tipo == "buy" and gain <= preco) or (tipo == "sell" and gain >= preco):
-                gain = None
+        # trail50: SEM alvo fixo — cavalga com o stop móvel (trava 50% do pico de lucro)
+        gain = None
 
         novo = ClaudeTraderModel().save({
             "id_ativos_base":     id_ativos_base,
@@ -162,35 +159,17 @@ class ClaudeTraderRule:
            (tipo == "sell" and preco >= op["stop_loss"]):
             return ClaudeTraderRule._encerrar(op, op["stop_loss"], "stop", "Stop atingido")
 
-        # 4. bateu o alvo FIXO → encerra (v1 burro: stop/alvo fixos, sem trailing)
-        gain = op.get("stop_gain")
-        if gain:
-            if (tipo == "buy" and preco >= gain) or (tipo == "sell" and preco <= gain):
-                return ClaudeTraderRule._encerrar(op, gain, "alvo", "Alvo atingido")
-        # (trailing fica pra v2 "esperto" — _trailing existe mas não é chamado no burro)
-
-    @staticmethod
-    def _trailing(op, preco):
-        """Move o stop: breakeven em +1R, depois trilha em (melhor_preço - 1R)."""
-        tipo = op["tipo_posicao"]
+        # 4. TRAIL50 — trava 50% do PICO de lucro, movendo o stop a cada poll (nunca contra)
         entrada = op["preco_entrada"]
-        risco = abs(entrada - op["stop_inicial"]) or 1
-        folga = round(risco * TRAIL_R_MULT)
-
-        if tipo == "buy":
-            ganho = preco - entrada
-            if ganho < risco:
-                return  # ainda não atingiu +1R — mantém stop inicial
-            novo_stop = preco - folga
-            if novo_stop > op["stop_loss"]:   # só sobe
-                ClaudeTraderRule._mover_stop(op, novo_stop, preco)
-        else:  # sell
-            ganho = entrada - preco
-            if ganho < risco:
-                return
-            novo_stop = preco + folga
-            if novo_stop < op["stop_loss"]:   # só desce
-                ClaudeTraderRule._mover_stop(op, novo_stop, preco)
+        fav_atual = (preco - entrada) if tipo == "buy" else (entrada - preco)
+        pico = max(op.get("mfe_pontos") or 0, fav_atual)   # melhor excursão até agora
+        if pico > 0:
+            trava = round(pico * TRAIL_PCT_PICO)           # 50% do pico
+            novo = (entrada + trava) if tipo == "buy" else (entrada - trava)
+            if (tipo == "buy" and novo > op["stop_loss"]) or (tipo == "sell" and novo < op["stop_loss"]):
+                return ClaudeTraderRule._mover_stop(op, novo, preco)
+        # nada mudou neste poll → manter
+        ClaudeTraderModel().update({"acao_mt5": "manter"}, op["id_operacao"])
 
     # ------------------------------------------------------------------ AÇÕES
     @staticmethod
