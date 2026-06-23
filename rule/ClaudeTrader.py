@@ -17,10 +17,13 @@ Fluxo (chamado pelo schedule a cada ~5min):
 
 Segurança: 'encerrar' é sempre afirmativo; erro NUNCA fecha por default.
 """
+import json
 from datetime import datetime, timezone, timedelta
 
+import config.env as memory
 from library.MySql import MySql
-from model.ClaudeTrader import ClaudeTraderModel, ClaudeTraderLogModel
+from library.HttpClient import HttpClient
+from model.ClaudeTrader import ClaudeTraderModel, ClaudeTraderLogModel, ClaudeTraderAnaliseModel
 from model.IntradayAnalysis import IntradayAnalysisModel
 from model.MarketAnalysis import MarketAnalysisModel
 
@@ -34,6 +37,24 @@ STOP_CURTO_PTS  = 100           # stop inicial CURTO fixo (controla risco/trade)
                                 # Valor conservador/raciocinado — calibrar com mais dado.
 TRAIL_PCT_PICO  = 0.5            # trail50: trava 50% do pico de lucro (entrada + pico*0.5)
 FIM_PREGAO_HHMM = 1750           # encerra posição a partir de 17:50 (sem overnight)
+
+_IA_MODEL       = "claude-haiku-4-5"
+_IA_MAX_TOKENS  = 600
+_SYSTEM_GESTAO = """Você é um trader profissional gerenciando uma posição JÁ ABERTA e EM LUCRO no Mini Índice Bovespa (WIN), operada por um robô.
+
+Recebe um JSON com: a posição (direção, entrada, stop atual, lucro atual em pontos), o último sinal intraday, o fundamental do dia e a evolução do preço desde a entrada.
+
+Sua tarefa: decidir o que fazer com a posição AGORA. Objetivo duplo: PROTEGER o lucro já acumulado e CAVALGAR a tendência se ela continuar; ENCERRAR se a tese enfraqueceu.
+
+REGRAS:
+- NÃO calcule nada — os números já vêm prontos.
+- A decisão é uma de três: "manter" (segue como está), "ajustar" (recalibrar o stop — informe o novo_stop em pontos inteiros) ou "encerrar" (fechar agora e realizar o lucro).
+- "ajustar" é só para PROTEGER mais (mover o stop a favor, travando lucro) ou dar espaço se a tendência está muito forte — NUNCA afrouxe o stop para o lado da perda.
+- Tendência forte + lucro pode crescer → "manter" ou "ajustar" (subir o stop).
+- Momentum morreu / sinal virou neutro ou contrário / preço esticado → "encerrar".
+
+Retorne EXCLUSIVAMENTE um JSON válido, sem markdown:
+{"recomendacao":"manter|ajustar|encerrar","novo_stop":<inteiro ou null>,"motivo":"<uma frase técnica>"}"""
 
 
 def _now():
@@ -161,11 +182,67 @@ class ClaudeTraderRule:
            (tipo == "sell" and preco >= op["stop_loss"]):
             return ClaudeTraderRule._encerrar(op, op["stop_loss"], "stop", "Stop atingido")
 
-        # 4. SEM trailing (v1) — o stop curto fixo segura a posição até stop/flip/fim-de-dia.
-        # Decisão do Japa: deixar o vencedor correr (maior net nos 7 dias), ciente de que
-        # devolve o lucro inteiro numa reversão (ex: 06-18 foi de lucro a -1040 no backtest).
-        # _mover_stop/_trailing ficam pra um v2 (ex: stop a breakeven) se o dado pedir.
+        # 4. SEM trailing mecânico. Mas: se está EM LUCRO, a cada sinal intraday novo (15min)
+        # consulta a IA (Haiku) p/ decidir manter / ajustar (recalibrar stop) / encerrar.
+        # Decisão pura da IA — registrada em claude_trader_analise pra avaliar depois.
+        fav = (preco - op["preco_entrada"]) if tipo == "buy" else (op["preco_entrada"] - preco)
+        if fav > 0 and ClaudeTraderRule._analise_ia(op, preco, fav):
+            return  # IA tratou (encerrou / ajustou)
         ClaudeTraderModel().update({"acao_mt5": "manter"}, op["id_operacao"])
+
+    # ------------------------------------------------------------------ CÉREBRO IA (15min, no lucro)
+    @staticmethod
+    def _analise_ia(op, preco, fav):
+        """Consulta o Haiku 1x por sinal intraday (15min), quando a posição está no lucro.
+        Acata: encerrar / ajustar (move stop) / manter. Registra tudo em claude_trader_analise.
+        Retorna True se agiu (encerrou/ajustou), False caso contrário (segue mecânico)."""
+        sinal = _ultimo_sinal(op.get("id_ativos_base") or 1)
+        sid = sinal.get("id_intraday_analysis") if sinal else None
+        if not sid or ClaudeTraderRule._ja_analisou(op["id_operacao"], sid):
+            return False  # sem sinal novo → não chama (1 análise por sinal/15min)
+
+        contexto = ClaudeTraderRule._contexto_ia(op, preco, fav, sinal)
+        resp = ClaudeTraderRule._call_haiku(contexto)
+
+        rec = (resp or {}).get("recomendacao")
+        novo_stop = (resp or {}).get("novo_stop")
+        acatado = 0
+        if resp and rec == "ajustar" and isinstance(novo_stop, (int, float)):
+            ns = int(novo_stop)
+            # só aplica se for proteção válida (lado certo, a favor)
+            tipo = op["tipo_posicao"]
+            if (tipo == "buy" and op["stop_loss"] < ns < preco) or \
+               (tipo == "sell" and preco < ns < op["stop_loss"]):
+                acatado = 1
+
+        # registra a análise (sempre — é o que vamos avaliar depois)
+        try:
+            ClaudeTraderAnaliseModel().save({
+                "id_operacao":          op["id_operacao"],
+                "id_intraday_analysis": sid,
+                "preco_no_momento":     preco,
+                "lucro_pontos":         int(fav),
+                "recomendacao":         rec,
+                "stop_antes":           op["stop_loss"],
+                "stop_sugerido":        int(novo_stop) if isinstance(novo_stop, (int, float)) else None,
+                "acatado":              acatado if rec in ("ajustar", "encerrar") and resp else 0,
+                "motivo":               (resp or {}).get("motivo"),
+                "analise_json":         json.dumps(resp, ensure_ascii=False) if resp else None,
+                "ia_disponivel":        1 if resp else 0,
+            })
+        except Exception:
+            pass
+
+        if not resp:
+            return False  # IA falhou → segue mecânico (nunca encerra por falha)
+
+        if rec == "encerrar":
+            ClaudeTraderRule._encerrar(op, preco, "sinal_contrario", "IA: encerrar — " + str((resp or {}).get("motivo", "")))
+            return True
+        if rec == "ajustar" and acatado:
+            ClaudeTraderRule._mover_stop(op, int(novo_stop), preco)
+            return True
+        return False  # manter
 
     # ------------------------------------------------------------------ AÇÕES
     @staticmethod
@@ -244,6 +321,73 @@ class ClaudeTraderRule:
              .where(["id_intraday_origem", "=", id_intraday])
              .limit(1).find())
         return bool(r)
+
+    @staticmethod
+    def _ja_analisou(id_operacao, id_intraday):
+        """True se a IA já analisou esta operação para este sinal intraday (1x por 15min)."""
+        r = (ClaudeTraderAnaliseModel()
+             .where(["id_operacao", "=", id_operacao])
+             .where(["id_intraday_analysis", "=", id_intraday])
+             .limit(1).find())
+        return bool(r)
+
+    @staticmethod
+    def _contexto_ia(op, preco, fav, sinal):
+        """Monta o contexto determinístico pra IA gerenciar a posição."""
+        def f(v):
+            return float(v) if v is not None else None
+        fr = (MarketAnalysisModel()
+              .where(["id_ativos_base", "=", op.get("id_ativos_base") or 1])
+              .order("analyzed_at", "DESC").limit(1).find())
+        fund = fr[0] if fr else {}
+        return {
+            "posicao": {
+                "direcao": op["tipo_posicao"], "entrada": op["preco_entrada"],
+                "stop_atual": op["stop_loss"], "lucro_pontos": int(fav),
+                "lucro_reais": round(fav * PONTO_REAIS, 2),
+                "mfe_pontos": op.get("mfe_pontos"), "mae_pontos": op.get("mae_pontos"),
+            },
+            "intraday": {
+                "direcao": sinal.get("ai_direcao"), "forca": sinal.get("ai_forca"),
+                "confianca": sinal.get("ai_confianca"), "rsi": f(sinal.get("ti_rsi")),
+                "macd_hist": f(sinal.get("ti_macd_hist")), "ema_sinal": sinal.get("ema_sinal"),
+                "suporte_1": sinal.get("sr_support_1"), "resistencia_1": sinal.get("sr_resistance_1"),
+                "tf5_alinhamento": sinal.get("tf5_alinhamento"),
+            },
+            "fundamental": {
+                "recomendacao": fund.get("recommendation"), "confianca": fund.get("confidence"),
+            },
+            "mercado": {"preco_atual": preco},
+        }
+
+    @staticmethod
+    def _call_haiku(contexto):
+        """Chama o Haiku p/ gestão da posição. Retorna dict {recomendacao, novo_stop, motivo} ou None."""
+        try:
+            user_msg = ("Decida a gestão desta posição aberta e retorne o JSON conforme instruído.\n\n"
+                        + json.dumps(contexto, ensure_ascii=False, default=str))
+            resp = HttpClient.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": memory.anthropic["API_KEY"],
+                         "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                payload={"model": _IA_MODEL, "max_tokens": _IA_MAX_TOKENS,
+                         "system": _SYSTEM_GESTAO,
+                         "messages": [{"role": "user", "content": user_msg}]},
+                timeout=30,
+            )
+            if not resp or resp["status_code"] not in (200, 201):
+                return None
+            data = resp["data"]
+            if data.get("stop_reason") == "max_tokens":
+                return None
+            raw = data["content"][0]["text"].strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            return json.loads(raw.strip())
+        except Exception:
+            return None
 
     @staticmethod
     def _log(id_op, evento, fonte, preco, stop_antes, stop_depois, motivo):

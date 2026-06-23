@@ -39,6 +39,34 @@ class ClaudeTraderModel(BaseModel):
         }
 
 
+class ClaudeTraderAnaliseModel(BaseModel):
+    """Decisões da IA (Haiku) sobre a posição aberta — a cada 15min, se no lucro.
+    Registra a recomendação (manter/ajustar/encerrar) pra avaliar a estratégia depois."""
+
+    def table(self):
+        return 'claude_trader_analise'
+
+    def pk(self):
+        return 'id_analise'
+
+    def fields(self):
+        return {
+            "id_analise":           "id_analise",
+            "id_operacao":          "id_operacao",
+            "id_intraday_analysis": "id_intraday_analysis",
+            "preco_no_momento":     "preco_no_momento",
+            "lucro_pontos":         "lucro_pontos",
+            "recomendacao":         "recomendacao",
+            "stop_antes":           "stop_antes",
+            "stop_sugerido":        "stop_sugerido",
+            "acatado":              "acatado",
+            "motivo":               "motivo",
+            "analise_json":         "analise_json",
+            "ia_disponivel":        "ia_disponivel",
+            "created_at":           "created_at",
+        }
+
+
 class ClaudeTraderLogModel(BaseModel):
     """Auditoria de cada decisão/movimento de stop do Claude Trader."""
 
