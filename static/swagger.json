@@ -616,6 +616,24 @@
         }
       }
     },
+    "/claude-trader/equalizar": {
+      "get": {
+        "tags": ["Claude Trader"],
+        "summary": "Máquina de estado do Claude Trader (execução intraday no MT5)",
+        "description": "Chamada pelo schedule a cada ~1min. Roda a gestão da posição e devolve o contrato pro MT5 executar. SEM posição: abre na 1a ocorrência de um sinal direcional do intraday (1 entrada por sinal, stop curto fixo 100pts, sem alvo). COM posição: encerra por stop/flip/fim-de-dia; e se está EM LUCRO, a cada sinal intraday novo (15min) consulta o Haiku p/ manter/ajustar(recalibra stop)/encerrar (registrado em claude_trader_analise). Requer header Authorization: <SCHEDULER_SECRET>.",
+        "produces": ["application/json"],
+        "parameters": [
+          { "name": "Authorization", "in": "header", "required": true, "type": "string" },
+          { "name": "id_ativos_base", "in": "query", "required": false, "type": "integer", "default": 1, "description": "1 = WIN" },
+          { "name": "account_number", "in": "query", "required": false, "type": "string", "description": "Conta MT5 (opcional; escopo da operação)" }
+        ],
+        "responses": {
+          "200": { "description": "Contrato pro MT5. Sem posição: { \"status\": \"nenhuma\", \"acao\": \"nada\" }. Com posição: { \"status\": \"aberta\", \"acao\": \"abrir|manter|mover_stop|encerrar\", \"tipo_posicao\": \"buy|sell\", \"preco_entrada\": 172735, \"stop_loss\": 172635, \"stop_gain\": null, \"motivo\": \"...\", \"id_operacao\": 1 }" },
+          "401": { "description": "Scheduler secret inválido ou ausente" },
+          "502": { "description": "Sem preço (mt5_candles)" }
+        }
+      }
+    },
     "/simulador/ordem/{id_ordem}/analise-ia": {
       "get": {
         "tags": ["Simulador de Ordens"],
