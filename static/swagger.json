@@ -620,10 +620,11 @@
       "get": {
         "tags": ["Claude Trader"],
         "summary": "Máquina de estado do Claude Trader (execução intraday no MT5)",
-        "description": "Chamada pelo schedule a cada ~1min. Roda a gestão da posição e devolve o contrato pro MT5 executar. SEM posição: abre na 1a ocorrência de um sinal direcional do intraday (1 entrada por sinal, stop curto fixo 100pts, sem alvo). COM posição: encerra por stop/flip/fim-de-dia; e se está EM LUCRO, a cada sinal intraday novo (15min) consulta o Haiku p/ manter/ajustar(recalibra stop)/encerrar (registrado em claude_trader_analise). Requer header Authorization: <SCHEDULER_SECRET>.",
+        "description": "Chamada pelo schedule a cada ~1min. Roda a gestão da posição e devolve o contrato pro MT5 executar. SEM posição: abre na 1a ocorrência de um sinal direcional do intraday (1 entrada por sinal, stop curto fixo 100pts, sem alvo). COM posição: encerra por stop/flip/fim-de-dia; e se está EM LUCRO, a cada sinal intraday novo (15min) consulta o Haiku p/ manter/ajustar(recalibra stop)/encerrar (registrado em claude_trader_analise). Autenticação via header X-Scheduler-Secret ou HTTP Basic Auth (password = SCHEDULER_SECRET).",
         "produces": ["application/json"],
         "parameters": [
-          { "name": "Authorization", "in": "header", "required": true, "type": "string" },
+          { "name": "X-Scheduler-Secret", "in": "header", "required": false, "type": "string", "description": "SCHEDULER_SECRET da env. Alternativa ao Basic Auth." },
+          { "name": "Authorization", "in": "header", "required": false, "type": "string", "description": "HTTP Basic Auth — formato: Basic base64(user:SCHEDULER_SECRET)." },
           { "name": "id_ativos_base", "in": "query", "required": false, "type": "integer", "default": 1, "description": "1 = WIN" },
           { "name": "account_number", "in": "query", "required": false, "type": "string", "description": "Conta MT5 (opcional; escopo da operação)" }
         ],
