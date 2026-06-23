@@ -2,15 +2,18 @@
 Claude Trader — módulo de execução intraday (profissional), ISOLADO do intraday.
 
 Filosofia: o sinal intraday (analysis_intraday) JÁ é a inteligência (Haiku a cada
-15min, com filtro de chop). O Claude Trader REUSA esse sinal e GERENCIA a posição
-como um trade contínuo: entra, trilha o stop (cavalga a tendência), encerra quando
-a tese morre. Determinístico, robusto, idempotente.
+15min, com filtro de chop). O Claude Trader REUSA esse sinal e GERENCIA a posição:
+entra com STOP CURTO FIXO (controla risco/trade), segura cavalgando a tendência, e
+encerra por stop/flip/fim-de-dia. Determinístico, robusto, idempotente.
+
+v1: stop curto fixo (100pts), SEM trailing (deixa o vencedor correr). Trailing
+(trail50) existe no código mas não é chamado — fica pra um v2 se o dado pedir.
 
 Fluxo (chamado pelo schedule a cada ~5min):
   processar() →
-    1. guarda-corpo: se há posição, checa stop e aplica trailing
-    2. cérebro: usa o último sinal intraday p/ abrir / encerrar (flip) / fim de dia
-    3. devolve o contrato pro MT5 (status, acao, entrada, stop, gain)
+    1. guarda-corpo: se há posição, checa stop fixo / flip / fim de dia
+    2. cérebro: usa o último sinal intraday p/ abrir (1 entrada por sinal)
+    3. devolve o contrato pro MT5 (status, acao, entrada, stop)
 
 Segurança: 'encerrar' é sempre afirmativo; erro NUNCA fecha por default.
 """
@@ -158,16 +161,10 @@ class ClaudeTraderRule:
            (tipo == "sell" and preco >= op["stop_loss"]):
             return ClaudeTraderRule._encerrar(op, op["stop_loss"], "stop", "Stop atingido")
 
-        # 4. TRAIL50 — trava 50% do PICO de lucro, movendo o stop a cada poll (nunca contra)
-        entrada = op["preco_entrada"]
-        fav_atual = (preco - entrada) if tipo == "buy" else (entrada - preco)
-        pico = max(op.get("mfe_pontos") or 0, fav_atual)   # melhor excursão até agora
-        if pico > 0:
-            trava = round(pico * TRAIL_PCT_PICO)           # 50% do pico
-            novo = (entrada + trava) if tipo == "buy" else (entrada - trava)
-            if (tipo == "buy" and novo > op["stop_loss"]) or (tipo == "sell" and novo < op["stop_loss"]):
-                return ClaudeTraderRule._mover_stop(op, novo, preco)
-        # nada mudou neste poll → manter
+        # 4. SEM trailing (v1) — o stop curto fixo segura a posição até stop/flip/fim-de-dia.
+        # Decisão do Japa: deixar o vencedor correr (maior net nos 7 dias), ciente de que
+        # devolve o lucro inteiro numa reversão (ex: 06-18 foi de lucro a -1040 no backtest).
+        # _mover_stop/_trailing ficam pra um v2 (ex: stop a breakeven) se o dado pedir.
         ClaudeTraderModel().update({"acao_mt5": "manter"}, op["id_operacao"])
 
     # ------------------------------------------------------------------ AÇÕES
