@@ -169,6 +169,9 @@ api.add_resource(appController.SimuladorOrdemItemController, '/simulador/ordem/<
 api.add_resource(appController.SimuladorOrdemEncerrarController, '/simulador/ordem/<int:id_ordem>/encerrar')
 api.add_resource(appController.SimuladorAnaliseIaController, '/simulador/ordem/<int:id_ordem>/analise-ia')
 
+#Claude Trader (execução intraday profissional)
+api.add_resource(appController.ClaudeTraderEqualizarController, '/claude-trader/equalizar')
+
 #touch ~/apps_wsgi/stg.wsgi
 
 
