@@ -26,6 +26,9 @@ PONTO_REAIS   = 0.20
 _ATIVO_SYMBOL = {1: 1}            # id_ativos_base -> id_symbols (mt5_candles)
 
 # --- parâmetros do v1 (todos configuráveis) ---
+STOP_CURTO_PTS  = 100           # stop inicial CURTO fixo (controla risco/trade). NÃO usa o
+                                # stop variável do Haiku (que era largo demais, até 505pts).
+                                # Valor conservador/raciocinado — calibrar com mais dado.
 TRAIL_PCT_PICO  = 0.5            # trail50: trava 50% do pico de lucro (entrada + pico*0.5)
 FIM_PREGAO_HHMM = 1750           # encerra posição a partir de 17:50 (sem overnight)
 
@@ -99,15 +102,11 @@ class ClaudeTraderRule:
             return
 
         tipo = "buy" if direcao == "compra" else "sell"
-        stop = sinal.get("ai_stop_loss")
-        if not stop:
-            return  # sem stop não opera
 
-        # corrige stop do lado errado (segurança) — relativo à ENTRADA REAL
-        if tipo == "buy" and stop >= preco:
-            stop = preco - 100
-        if tipo == "sell" and stop <= preco:
-            stop = preco + 100
+        # STOP CURTO FIXO (relativo à entrada real) — controla o risco por trade.
+        # Backtest: stop fixo curto + trail50 é mais robusto que o stop largo do Haiku
+        # (positivo em 5/7 dias e +881 mesmo sem o melhor dia).
+        stop = (preco - STOP_CURTO_PTS) if tipo == "buy" else (preco + STOP_CURTO_PTS)
 
         # trail50: SEM alvo fixo — cavalga com o stop móvel (trava 50% do pico de lucro)
         gain = None
