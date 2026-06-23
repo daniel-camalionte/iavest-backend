@@ -6,5 +6,5 @@ class VersionController(MethodView):
         return {
             "version": "1.7.1",
             "data":    "2026-06-23",
-            "commit":  "PENDENTE"
+            "commit":  "6805b60"
         }, 200
