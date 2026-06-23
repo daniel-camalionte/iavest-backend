@@ -1,9 +1,10 @@
 from flask.views import MethodView
-from datetime import datetime
+
 
 class VersionController(MethodView):
     def get(self):
         return {
-            "version": "1.7",
-            "datetime": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            "version": "1.7.1",
+            "data":    "2026-06-23",
+            "commit":  "PENDENTE"
         }, 200
