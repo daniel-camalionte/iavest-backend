@@ -6,10 +6,11 @@ Filosofia: o sinal intraday (analysis_intraday) JÁ é a inteligência (Haiku a 
 entra com STOP CURTO FIXO (controla risco/trade), segura cavalgando a tendência, e
 encerra por stop/flip/fim-de-dia. Determinístico, robusto, idempotente.
 
-v2: 100% dados da IA. Entra com o STOP da IA (ai_stop_loss; fallback fixo 100 se vier
-do lado errado da entrada). Os ALVOS do intraday (ai_alvo_1/2) NÃO são TP fixo — são
-gatilhos: ao bater alvo1 (e depois alvo2) o Haiku é acionado p/ recalcular e PROTEGER o
-capital subindo o stop (mín. breakeven). O Haiku deixou de rodar a cada tick.
+v2.1: entrada com STOP INICIAL FIXO −100 (cap de downside; o ai_stop_loss largo da IA
+virou −620 em 25/06 e foi aposentado). Os ALVOS do intraday (ai_alvo_1/2) NÃO são TP fixo
+— são gatilhos: ao bater alvo1 (e depois alvo2) o Haiku é acionado p/ recalcular e PROTEGER
+o capital subindo o stop (mín. breakeven). Filtro de volume (vol_rel<0.8) veta a entrada.
+Assimetria: arrisca 100 fixo; se andar, cavalga protegendo no alvo. Haiku só no alvo.
 
 Fluxo (chamado pelo schedule a cada ~1min):
   processar() →
@@ -189,16 +190,12 @@ class ClaudeTraderRule:
 
         tipo = "buy" if direcao == "compra" else "sell"
 
-        # V2: STOP DA IA (ai_stop_loss absoluto). Se vier do lado errado da entrada real
-        # (lag: a IA calcula o stop no preço do candle e a entrada é a mercado ~min depois)
-        # ou ausente → fallback no stop curto fixo de 100pts.
-        ai_stop = sinal.get("ai_stop_loss")
-        if ai_stop and ((tipo == "buy" and ai_stop < preco) or (tipo == "sell" and ai_stop > preco)):
-            stop = int(ai_stop)
-            origem_stop = "ia"
-        else:
-            stop = (preco - STOP_CURTO_PTS) if tipo == "buy" else (preco + STOP_CURTO_PTS)
-            origem_stop = "fallback_100"
+        # STOP INICIAL FIXO −100 (cap de downside por trade). NÃO usa mais o ai_stop_loss
+        # largo da IA — foi ele que virou −620 em 25/06 (stop de 620pts). A IA volta a atuar
+        # SÓ na proteção: ao bater o alvo, o Haiku recalcula e sobe o stop. Assimetria:
+        # arrisca 100 fixo na entrada; se andar, cavalga protegendo no alvo.
+        stop = (preco - STOP_CURTO_PTS) if tipo == "buy" else (preco + STOP_CURTO_PTS)
+        origem_stop = "fixo_100"
 
         # Alvos da IA: gatilhos de PROTEÇÃO (acionam o Haiku), NÃO take-profit fixo no MT5.
         alvo_1 = int(sinal["ai_alvo_1"]) if sinal.get("ai_alvo_1") else None
