@@ -6,11 +6,12 @@ Filosofia: o sinal intraday (analysis_intraday) JÁ é a inteligência (Haiku a 
 entra com STOP CURTO FIXO (controla risco/trade), segura cavalgando a tendência, e
 encerra por stop/flip/fim-de-dia. Determinístico, robusto, idempotente.
 
-v2.1: entrada com STOP INICIAL FIXO −100 (cap de downside; o ai_stop_loss largo da IA
-virou −620 em 25/06 e foi aposentado). Os ALVOS do intraday (ai_alvo_1/2) NÃO são TP fixo
-— são gatilhos: ao bater alvo1 (e depois alvo2) o Haiku é acionado p/ recalcular e PROTEGER
-o capital subindo o stop (mín. breakeven). Filtro de volume (vol_rel<0.8) veta a entrada.
-Assimetria: arrisca 100 fixo; se andar, cavalga protegendo no alvo. Haiku só no alvo.
+v2.4 (HÍBRIDO de stop):
+- ENTRADAS NORMAIS (rompimento intraday): stop inicial = ai_stop_loss da IA (fallback −100
+  se inválido) + proteção por alvo (Haiku sobe o stop ao bater alvo1/alvo2). Dá espaço pra
+  cavalgar. Risco de cauda do stop largo assumido (conta própria, 1 contrato).
+- PRIMEIRO TIRO (aposta da abertura, confluência): stop −100 fixo + gain +300 fixo (fechado).
+- Filtro de volume (bova11_vol_rel<0.8) veta a entrada normal. Haiku só atua no alvo.
 
 Fluxo (chamado pelo schedule a cada ~1min):
   processar() →
@@ -47,6 +48,11 @@ VOL_REL_MIN     = 0.8            # FILTRO DE ENTRADA: não abre direcional com v
                                  # volume tende a falhar"; 37% dos sinais saem assim. Análise
                                  # 22–25/06: vetar isso teria matado o −620 de 25/06 e levado
                                  # o P&L da janela de −835 → −115. None = não veta (sem dado).
+PRIMEIRO_TIRO_GAIN     = 300     # PRIMEIRO TIRO: alvo fixo (take-profit) da aposta da abertura.
+PRIMEIRO_TIRO_ATE_HHMM = 910     # só atira na janela de abertura (até 09:10). Direção vem da
+                                 # CONFLUÊNCIA de abertura (EWZ×2+SPY+futuros+gap+1º candle),
+                                 # não do fundamental diário nem do OR. Backtest 06: +71/tiro
+                                 # no alvo +300 (vs +20 do fundamental). Risco fixo −100.
 
 _IA_MODEL       = "claude-haiku-4-5"
 _IA_MAX_TOKENS  = 600
@@ -98,6 +104,48 @@ def _market_analysis_id(id_ativos_base=1):
          .where(["id_ativos_base", "=", id_ativos_base])
          .order("analyzed_at", "DESC").limit(1).find())
     return r[0]["id_market_analysis"] if r else None
+
+
+def _confluencia_abertura(id_ativos_base=1):
+    """Direção do PRIMEIRO TIRO pela CONFLUÊNCIA de abertura (pré-mercado) — não pelo
+    fundamental diário (perma-bearish) nem pelo OR. EWZ (proxy do gap do WIN, peso 2) + SPY
+    + futuros US + gap + direção do 1º candle. Retorna 'buy'/'sell' se |conf|>=2, senão None."""
+    hoje = _now().strftime("%Y-%m-%d")
+    m = (MarketAnalysisModel()
+         .where(["id_ativos_base", "=", id_ativos_base])
+         .where(["DATE(analyzed_at)", "=", hoje])
+         .order("analyzed_at", "DESC").limit(1).find())
+    if not m:
+        return None  # sem fundamental do dia → sem confluência
+    a = m[0]
+
+    def _v(x, th):
+        if x is None:
+            return 0
+        x = float(x)
+        return 1 if x > th else (-1 if x < -th else 0)
+
+    # direção do 1º candle do dia (close - open)
+    symbol = _ATIVO_SYMBOL.get(id_ativos_base, id_ativos_base)
+    rows = MySql().fetch(
+        "SELECT open, close FROM mt5_candles WHERE id_symbols=%s AND `datetime` >= %s "
+        "ORDER BY `datetime` ASC LIMIT 1",
+        (symbol, hoje + " 00:00:00")) or []
+    primeiro = 0
+    if rows:
+        d = float(rows[0]["close"]) - float(rows[0]["open"])
+        primeiro = 1 if d > 0 else (-1 if d < 0 else 0)
+
+    conf = (2 * _v(a.get("mc_ewz_pct"), 0.3)
+            + _v(a.get("mc_spy_pct"), 0.3)
+            + _v(a.get("mc_es1_pct"), 0.2)
+            + _v(a.get("td_opening_gap_pct"), 0.2)
+            + primeiro)
+    if conf >= 2:
+        return "buy"
+    if conf <= -2:
+        return "sell"
+    return None
 
 
 @contextmanager
@@ -156,7 +204,9 @@ class ClaudeTraderRule:
                 ClaudeTraderRule._gerir(op, preco, id_ativos_base)
                 op = ClaudeTraderRule._buscar(op["id_operacao"])  # recarrega estado
             else:
-                ClaudeTraderRule._talvez_abrir(id_ativos_base, id_estrategia, preco)
+                # PRIMEIRO TIRO (janela de abertura) tem prioridade; senão, fluxo normal V2.1.
+                if not ClaudeTraderRule._talvez_primeiro_tiro(id_ativos_base, id_estrategia, preco):
+                    ClaudeTraderRule._talvez_abrir(id_ativos_base, id_estrategia, preco)
                 op = ClaudeTraderRule._operacao_aberta(id_ativos_base, id_estrategia)
 
         return ClaudeTraderRule._contrato_mt5(op), 200
@@ -190,12 +240,17 @@ class ClaudeTraderRule:
 
         tipo = "buy" if direcao == "compra" else "sell"
 
-        # STOP INICIAL FIXO −100 (cap de downside por trade). NÃO usa mais o ai_stop_loss
-        # largo da IA — foi ele que virou −620 em 25/06 (stop de 620pts). A IA volta a atuar
-        # SÓ na proteção: ao bater o alvo, o Haiku recalcula e sobe o stop. Assimetria:
-        # arrisca 100 fixo na entrada; se andar, cavalga protegendo no alvo.
-        stop = (preco - STOP_CURTO_PTS) if tipo == "buy" else (preco + STOP_CURTO_PTS)
-        origem_stop = "fixo_100"
+        # HÍBRIDO: entradas NORMAIS usam o STOP DA IA (ai_stop_loss) — dá espaço pra cavalgar
+        # (o −100 fixo era apertado demais p/ o WIN, saía rápido demais). Fallback −100 se o
+        # stop vier do lado errado da entrada (lag). O PRIMEIRO TIRO segue −100 fixo (lá o
+        # risco é fechado). Risco de cauda do stop largo ASSUMIDO (conta própria, 1 contrato).
+        ai_stop = sinal.get("ai_stop_loss")
+        if ai_stop and ((tipo == "buy" and ai_stop < preco) or (tipo == "sell" and ai_stop > preco)):
+            stop = int(ai_stop)
+            origem_stop = "ia"
+        else:
+            stop = (preco - STOP_CURTO_PTS) if tipo == "buy" else (preco + STOP_CURTO_PTS)
+            origem_stop = "fallback_100"
 
         # Alvos da IA: gatilhos de PROTEÇÃO (acionam o Haiku), NÃO take-profit fixo no MT5.
         alvo_1 = int(sinal["ai_alvo_1"]) if sinal.get("ai_alvo_1") else None
@@ -227,6 +282,64 @@ class ClaudeTraderRule:
         ClaudeTraderRule._log(novo, "abertura", "cerebro", preco, None, int(stop),
                               "Abre %s @ %s, stop %s (%s), alvo1 %s alvo2 %s"
                               % (tipo, preco, int(stop), origem_stop, alvo_1, alvo_2))
+
+    # ------------------------------------------------------------------ PRIMEIRO TIRO
+    @staticmethod
+    def _ja_operou_hoje(id_ativos_base, id_estrategia):
+        """True se já existe QUALQUER operação hoje (qualquer status) — o primeiro tiro é a
+        1ª operação do dia, então isso garante 1 tiro/dia."""
+        hoje = _now().strftime("%Y-%m-%d")
+        r = (ClaudeTraderModel()
+             .where(["id_ativos_base", "=", id_ativos_base])
+             .where(["id_estrategia", "=", id_estrategia])
+             .where(["DATE(abertura_em)", "=", hoje])
+             .limit(1).find())
+        return bool(r)
+
+    @staticmethod
+    def _talvez_primeiro_tiro(id_ativos_base, id_estrategia, preco):
+        """PRIMEIRO TIRO — aposta da abertura. Na janela de abertura (até PRIMEIRO_TIRO_ATE_HHMM)
+        e sem nenhuma operação ainda hoje, se a CONFLUÊNCIA de abertura for clara, abre 1 tiro
+        com stop −100 FIXO + gain +PRIMEIRO_TIRO_GAIN FIXO (risco/retorno definido — não tem
+        OR/tendência ainda pra cavalgar). stop_gain setado MARCA o primeiro tiro p/ o _gerir.
+        Retorna True se atirou."""
+        if _hhmm(_now()) > PRIMEIRO_TIRO_ATE_HHMM:
+            return False
+        if ClaudeTraderRule._ja_operou_hoje(id_ativos_base, id_estrategia):
+            return False
+        tipo = _confluencia_abertura(id_ativos_base)
+        if tipo not in ("buy", "sell"):
+            return False  # confluência fraca/mista → não atira
+
+        stop = (preco - STOP_CURTO_PTS) if tipo == "buy" else (preco + STOP_CURTO_PTS)
+        gain = (preco + PRIMEIRO_TIRO_GAIN) if tipo == "buy" else (preco - PRIMEIRO_TIRO_GAIN)
+        novo = ClaudeTraderModel().save({
+            "id_ativos_base":     id_ativos_base,
+            "id_market_analysis": _market_analysis_id(id_ativos_base),
+            "id_intraday_origem": None,
+            "id_estrategia":      id_estrategia,
+            "tipo_posicao":       tipo,
+            "contratos":          1,
+            "preco_entrada":      preco,
+            "stop_inicial":       int(stop),
+            "stop_loss":          int(stop),
+            "stop_gain":          int(gain),   # TP FIXO — marca o primeiro tiro
+            "alvo_1":             None,
+            "alvo_2":             None,
+            "protegido_nivel":    0,
+            "status":             "aberta",
+            "acao_mt5":           "abrir",
+            "modo":               "real",
+            "abertura_em":        _now().strftime("%Y-%m-%d %H:%M:%S"),
+            "mfe_pontos":         0,
+            "mae_pontos":         0,
+            "motivo":             "Primeiro tiro: confluência abertura %s | stop %s gain %s"
+                                  % (tipo, int(stop), int(gain)),
+        })
+        ClaudeTraderRule._log(novo, "abertura", "cerebro", preco, None, int(stop),
+                              "Primeiro tiro %s @ %s, stop %s, gain %s"
+                              % (tipo, preco, int(stop), int(gain)))
+        return True
 
     # ------------------------------------------------------------------ GESTÃO
     @staticmethod
@@ -263,6 +376,12 @@ class ClaudeTraderRule:
         if (tipo == "buy" and preco <= op["stop_loss"]) or \
            (tipo == "sell" and preco >= op["stop_loss"]):
             return ClaudeTraderRule._encerrar(op, op["stop_loss"], "stop", "Stop atingido")
+
+        # 3b. PRIMEIRO TIRO: take-profit FIXO. Só ops com stop_gain setado (o primeiro tiro);
+        # as entradas normais têm stop_gain None e cavalgam com proteção por alvo.
+        sg = op.get("stop_gain")
+        if sg and ((tipo == "buy" and preco >= sg) or (tipo == "sell" and preco <= sg)):
+            return ClaudeTraderRule._encerrar(op, sg, "alvo", "Primeiro tiro: alvo atingido")
 
         # 4. V2: proteção acionada por ALVO. O Haiku NÃO roda mais a cada tick — só quando o
         # preço atinge o alvo1 (e depois o alvo2) do intraday. Aí recalcula e PROTEGE o

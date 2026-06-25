@@ -772,34 +772,27 @@ class IntradayAnalysisRule:
             ai["ai_riscos"] = _riscos
             ai["ai_resumo"] = "Neutro — sinal suprimido por chop (preço dentro do opening range)."
 
-        # 7b. Confluência de timeframes — modera sinal CONTRA a tendência do dia.
-        # Se a direção contradiz o viés do fundamental e a confiança diária é ALTA,
-        # rebaixa a força em um nível e limita a confiança, marcando contra-tendência.
-        # NÃO inverte a direção — só modera (operar contra o tempo gráfico maior tem
-        # expectativa menor). Flag marcada para qualquer divergência; rebaixe só vs ALTA.
+        # 7b. Regime diário como CONTEXTO — a DIREÇÃO é do intraday, não do fundamental.
+        # Marcamos quando o sinal vai contra o viés diário (flag + nota, pra análise), mas
+        # NÃO rebaixamos mais força/confiança: o viés perma-bearish do fundamental estava
+        # SUPRIMINDO justamente os longs de bounce que queremos pegar num downtrend. O
+        # fundamental vira contexto/regime; quem decide compra/venda é o intraday.
         contra_tendencia = 0
         _vies     = (morning.get("recommendation") or "").upper()
         _vies_c   = (morning.get("confidence") or "").upper()
         _alinhado = {"VENDA": "venda", "COMPRA": "compra"}.get(_vies)
         if _alinhado is not None and ai_direcao in ("compra", "venda") and ai_direcao != _alinhado:
             contra_tendencia = 1
-            if _vies_c == "ALTA":
-                ai["ai_forca"] = {"forte": "media", "media": "fraca"}.get(
-                    ai.get("ai_forca"), ai.get("ai_forca"))
-                _cf = ai.get("ai_confianca")
-                if isinstance(_cf, (int, float)) and _cf > 60:
-                    ai["ai_confianca"] = 60
-                _nota = (
-                    f"CONTRA a tendência do dia (fundamental {_vies} {_vies_c}). "
-                    f"Operar contra o tempo gráfico maior tem expectativa menor — "
-                    f"força e confiança moderadas."
-                )
-                _riscos = ai.get("ai_riscos")
-                if isinstance(_riscos, list):
-                    _riscos.append(_nota)
-                else:
-                    _riscos = [_nota]
-                ai["ai_riscos"] = _riscos
+            _nota = (
+                f"Contexto: sinal CONTRA o regime diário (fundamental {_vies} {_vies_c}). "
+                f"Direção decidida pelo intraday — fundamental é contexto, não veto."
+            )
+            _riscos = ai.get("ai_riscos")
+            if isinstance(_riscos, list):
+                _riscos.append(_nota)
+            else:
+                _riscos = [_nota]
+            ai["ai_riscos"] = _riscos
 
         if ai_direcao == "compra" and ai_stop_loss and ai_stop_loss >= win_price:
             ai["ai_stop_loss"] = win_price - round(atr * 1.5)
