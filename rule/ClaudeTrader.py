@@ -41,6 +41,11 @@ STOP_CURTO_PTS  = 100           # stop inicial CURTO fixo (controla risco/trade)
                                 # Valor conservador/raciocinado — calibrar com mais dado.
 TRAIL_PCT_PICO  = 0.5            # trail50: trava 50% do pico de lucro (entrada + pico*0.5)
 FIM_PREGAO_HHMM = 1745           # encerra posição a partir de 17:45 (sem overnight)
+VOL_REL_MIN     = 0.8            # FILTRO DE ENTRADA: não abre direcional com volume fraco
+                                 # (bova11_vol_rel < 0.8). A própria IA cita "rompimento sem
+                                 # volume tende a falhar"; 37% dos sinais saem assim. Análise
+                                 # 22–25/06: vetar isso teria matado o −620 de 25/06 e levado
+                                 # o P&L da janela de −835 → −115. None = não veta (sem dado).
 
 _IA_MODEL       = "claude-haiku-4-5"
 _IA_MAX_TOKENS  = 600
@@ -165,6 +170,13 @@ class ClaudeTraderRule:
         direcao = sinal.get("ai_direcao")
         if direcao not in ("compra", "venda"):
             return  # neutro → fica de fora
+
+        # FILTRO DE VOLUME: rompimento sem volume tende a falhar (a própria IA flagra isso).
+        # Se o sinal direcional veio com bova11_vol_rel < VOL_REL_MIN, trata como neutro e
+        # NÃO abre. None (sem dado de volume) não veta. Mata o tipo de trade que deu −620.
+        vol_rel = sinal.get("bova11_vol_rel")
+        if vol_rel is not None and float(vol_rel) < VOL_REL_MIN:
+            return  # volume fraco → não opera o rompimento
 
         # fim de pregão: não abre posição nova perto do fechamento
         if _hhmm(_now()) >= FIM_PREGAO_HHMM:
