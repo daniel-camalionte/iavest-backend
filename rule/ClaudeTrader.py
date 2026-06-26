@@ -54,6 +54,20 @@ PRIMEIRO_TIRO_ATE_HHMM = 910     # só atira na janela de abertura (até 09:10).
                                  # não do fundamental diário nem do OR. Backtest 06: +71/tiro
                                  # no alvo +300 (vs +20 do fundamental). Risco fixo −100.
 
+# CONFIG POR ESTRATÉGIA — os defaults abaixo são exatamente a V2.4. Cada id_estrategia pode
+# SOBRESCREVER via estrategia.parametros (JSON), permitindo rodar uma VERSÃO DE TESTE (ex.:
+# id=7) com outros parâmetros SEM deploy de código e SEM afetar os clientes (id=6). Ver
+# _config_estrategia(). Só cobre params de CÉREBRO (o sinal intraday é compartilhado por ativo).
+_CONFIG_DEFAULT = {
+    "stop_normal":            "ia",                   # entradas normais: "ia"=ai_stop_loss; "fixo"=stop_fixo_pts
+    "stop_fixo_pts":          STOP_CURTO_PTS,         # 100 (fallback / "fixo" / stop do primeiro tiro)
+    "vol_min":                VOL_REL_MIN,            # 0.8; None = sem filtro de volume
+    "primeiro_tiro":          True,                   # liga/desliga a aposta da abertura
+    "primeiro_tiro_gain":     PRIMEIRO_TIRO_GAIN,     # 300
+    "primeiro_tiro_ate_hhmm": PRIMEIRO_TIRO_ATE_HHMM, # 910
+    "fim_pregao_hhmm":        FIM_PREGAO_HHMM,        # 1745
+}
+
 _IA_MODEL       = "claude-haiku-4-5"
 _IA_MAX_TOKENS  = 600
 _SYSTEM_GESTAO = """Você é um trader profissional gerenciando uma posição JÁ ABERTA e EM LUCRO no Mini Índice Bovespa (WIN), operada por um robô.
@@ -148,6 +162,24 @@ def _confluencia_abertura(id_ativos_base=1):
     return None
 
 
+def _config_estrategia(id_estrategia):
+    """Config da estratégia: defaults (V2.4) sobrescritos por estrategia.parametros (JSON).
+    Permite rodar uma versão de teste por id_estrategia (ex.: 6=prod V2.4, 7=teste) SEM
+    deploy de código e sem afetar os outros ids. Erro/ausência → usa defaults (V2.4)."""
+    cfg = dict(_CONFIG_DEFAULT)
+    try:
+        rows = MySql().fetch("SELECT parametros FROM estrategia WHERE id_estrategia=%s LIMIT 1",
+                             (id_estrategia,)) or []
+        p = rows[0].get("parametros") if rows else None
+        if p:
+            p = json.loads(p) if isinstance(p, str) else p
+            if isinstance(p, dict):
+                cfg.update(p)
+    except Exception:
+        pass
+    return cfg
+
+
 @contextmanager
 def _lock_operacao(id_ativos_base, id_estrategia, timeout=8):
     """Serializa o processar() por (ativo, estratégia) com um advisory lock do MySQL.
@@ -198,22 +230,23 @@ class ClaudeTraderRule:
                 op = ClaudeTraderRule._operacao_aberta(id_ativos_base, id_estrategia)
                 return ClaudeTraderRule._contrato_mt5(op), 200
 
+            cfg = _config_estrategia(id_estrategia)   # defaults V2.4; id pode sobrescrever
             op = ClaudeTraderRule._operacao_aberta(id_ativos_base, id_estrategia)
 
             if op:
-                ClaudeTraderRule._gerir(op, preco, id_ativos_base)
+                ClaudeTraderRule._gerir(op, preco, id_ativos_base, cfg)
                 op = ClaudeTraderRule._buscar(op["id_operacao"])  # recarrega estado
             else:
                 # PRIMEIRO TIRO (janela de abertura) tem prioridade; senão, fluxo normal V2.1.
-                if not ClaudeTraderRule._talvez_primeiro_tiro(id_ativos_base, id_estrategia, preco):
-                    ClaudeTraderRule._talvez_abrir(id_ativos_base, id_estrategia, preco)
+                if not ClaudeTraderRule._talvez_primeiro_tiro(id_ativos_base, id_estrategia, preco, cfg):
+                    ClaudeTraderRule._talvez_abrir(id_ativos_base, id_estrategia, preco, cfg)
                 op = ClaudeTraderRule._operacao_aberta(id_ativos_base, id_estrategia)
 
         return ClaudeTraderRule._contrato_mt5(op), 200
 
     # ------------------------------------------------------------------ CÉREBRO
     @staticmethod
-    def _talvez_abrir(id_ativos_base, id_estrategia, preco):
+    def _talvez_abrir(id_ativos_base, id_estrategia, preco, cfg):
         """Sem posição: abre se o último sinal intraday for direcional (1 entrada por sinal)."""
         sinal = _ultimo_sinal(id_ativos_base)
         if not sinal:
@@ -222,15 +255,15 @@ class ClaudeTraderRule:
         if direcao not in ("compra", "venda"):
             return  # neutro → fica de fora
 
-        # FILTRO DE VOLUME: rompimento sem volume tende a falhar (a própria IA flagra isso).
-        # Se o sinal direcional veio com bova11_vol_rel < VOL_REL_MIN, trata como neutro e
-        # NÃO abre. None (sem dado de volume) não veta. Mata o tipo de trade que deu −620.
+        # FILTRO DE VOLUME (cfg.vol_min): rompimento sem volume tende a falhar. Se o sinal veio
+        # com bova11_vol_rel < vol_min, não abre. None (sem dado ou cfg sem filtro) não veta.
+        vol_min = cfg.get("vol_min")
         vol_rel = sinal.get("bova11_vol_rel")
-        if vol_rel is not None and float(vol_rel) < VOL_REL_MIN:
+        if vol_min is not None and vol_rel is not None and float(vol_rel) < float(vol_min):
             return  # volume fraco → não opera o rompimento
 
         # fim de pregão: não abre posição nova perto do fechamento
-        if _hhmm(_now()) >= FIM_PREGAO_HHMM:
+        if _hhmm(_now()) >= cfg["fim_pregao_hhmm"]:
             return
 
         # ANTI-WHIPSAW: 1 entrada por sinal — não reabre no mesmo candle intraday
@@ -240,17 +273,18 @@ class ClaudeTraderRule:
 
         tipo = "buy" if direcao == "compra" else "sell"
 
-        # HÍBRIDO: entradas NORMAIS usam o STOP DA IA (ai_stop_loss) — dá espaço pra cavalgar
-        # (o −100 fixo era apertado demais p/ o WIN, saía rápido demais). Fallback −100 se o
-        # stop vier do lado errado da entrada (lag). O PRIMEIRO TIRO segue −100 fixo (lá o
-        # risco é fechado). Risco de cauda do stop largo ASSUMIDO (conta própria, 1 contrato).
+        # STOP da entrada normal (cfg.stop_normal): "ia" = ai_stop_loss (cavalga; fallback fixo
+        # se vier do lado errado da entrada); "fixo" = stop_fixo_pts. A proteção por alvo sobe o
+        # stop depois. O PRIMEIRO TIRO tem stop fechado próprio. (V2.4: default "ia".)
+        sfp = cfg["stop_fixo_pts"]
         ai_stop = sinal.get("ai_stop_loss")
-        if ai_stop and ((tipo == "buy" and ai_stop < preco) or (tipo == "sell" and ai_stop > preco)):
+        if cfg["stop_normal"] == "ia" and ai_stop and \
+           ((tipo == "buy" and ai_stop < preco) or (tipo == "sell" and ai_stop > preco)):
             stop = int(ai_stop)
             origem_stop = "ia"
         else:
-            stop = (preco - STOP_CURTO_PTS) if tipo == "buy" else (preco + STOP_CURTO_PTS)
-            origem_stop = "fallback_100"
+            stop = (preco - sfp) if tipo == "buy" else (preco + sfp)
+            origem_stop = "fixo" if cfg["stop_normal"] != "ia" else "fallback"
 
         # Alvos da IA: gatilhos de PROTEÇÃO (acionam o Haiku), NÃO take-profit fixo no MT5.
         alvo_1 = int(sinal["ai_alvo_1"]) if sinal.get("ai_alvo_1") else None
@@ -297,13 +331,14 @@ class ClaudeTraderRule:
         return bool(r)
 
     @staticmethod
-    def _talvez_primeiro_tiro(id_ativos_base, id_estrategia, preco):
-        """PRIMEIRO TIRO — aposta da abertura. Na janela de abertura (até PRIMEIRO_TIRO_ATE_HHMM)
-        e sem nenhuma operação ainda hoje, se a CONFLUÊNCIA de abertura for clara, abre 1 tiro
-        com stop −100 FIXO + gain +PRIMEIRO_TIRO_GAIN FIXO (risco/retorno definido — não tem
-        OR/tendência ainda pra cavalgar). stop_gain setado MARCA o primeiro tiro p/ o _gerir.
-        Retorna True se atirou."""
-        if _hhmm(_now()) > PRIMEIRO_TIRO_ATE_HHMM:
+    def _talvez_primeiro_tiro(id_ativos_base, id_estrategia, preco, cfg):
+        """PRIMEIRO TIRO — aposta da abertura. Na janela de abertura (até cfg.primeiro_tiro_ate_hhmm)
+        e sem nenhuma operação ainda hoje, se a CONFLUÊNCIA de abertura for clara, abre 1 tiro com
+        stop fixo (cfg.stop_fixo_pts) + gain fixo (cfg.primeiro_tiro_gain). stop_gain setado MARCA
+        o primeiro tiro p/ o _gerir. Retorna True se atirou."""
+        if not cfg.get("primeiro_tiro"):
+            return False
+        if _hhmm(_now()) > cfg["primeiro_tiro_ate_hhmm"]:
             return False
         if ClaudeTraderRule._ja_operou_hoje(id_ativos_base, id_estrategia):
             return False
@@ -311,8 +346,9 @@ class ClaudeTraderRule:
         if tipo not in ("buy", "sell"):
             return False  # confluência fraca/mista → não atira
 
-        stop = (preco - STOP_CURTO_PTS) if tipo == "buy" else (preco + STOP_CURTO_PTS)
-        gain = (preco + PRIMEIRO_TIRO_GAIN) if tipo == "buy" else (preco - PRIMEIRO_TIRO_GAIN)
+        sfp = cfg["stop_fixo_pts"]; ptg = cfg["primeiro_tiro_gain"]
+        stop = (preco - sfp) if tipo == "buy" else (preco + sfp)
+        gain = (preco + ptg) if tipo == "buy" else (preco - ptg)
         novo = ClaudeTraderModel().save({
             "id_ativos_base":     id_ativos_base,
             "id_market_analysis": _market_analysis_id(id_ativos_base),
@@ -343,7 +379,7 @@ class ClaudeTraderRule:
 
     # ------------------------------------------------------------------ GESTÃO
     @staticmethod
-    def _gerir(op, preco, id_ativos_base):
+    def _gerir(op, preco, id_ativos_base, cfg):
         """Posição aberta: reconciliação / fim de dia / flip / stop / trailing."""
         tipo = op["tipo_posicao"]
 
@@ -361,7 +397,7 @@ class ClaudeTraderRule:
         ClaudeTraderRule._atualiza_excursao(op, preco)
 
         # 1. fim de pregão → encerra
-        if _hhmm(_now()) >= FIM_PREGAO_HHMM:
+        if _hhmm(_now()) >= cfg["fim_pregao_hhmm"]:
             return ClaudeTraderRule._encerrar(op, preco, "fim_dia", "Fim de pregão — sem overnight")
 
         # 2. sinal virou → encerra (sem reverter)
