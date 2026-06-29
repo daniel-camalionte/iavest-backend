@@ -58,6 +58,7 @@ class IntradayAnalysisModel(BaseModel):
             "dolfut_price":         "dolfut_price",
             "dolfut_chg_pct":       "dolfut_chg_pct",
             "bova11_volume":        "bova11_volume",
+            "bova11_preco":         "bova11_preco",
             "bova11_vol_rel":       "bova11_vol_rel",
             "bova11_vol_nivel":     "bova11_vol_nivel",
 

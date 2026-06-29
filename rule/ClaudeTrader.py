@@ -66,6 +66,12 @@ _CONFIG_DEFAULT = {
     "primeiro_tiro_gain":     PRIMEIRO_TIRO_GAIN,     # 300
     "primeiro_tiro_ate_hhmm": PRIMEIRO_TIRO_ATE_HHMM, # 910
     "fim_pregao_hhmm":        FIM_PREGAO_HHMM,        # 1745
+    "reentrada":              False,                  # TRILHO DE REENTRADA (V2.6): com a principal
+                                                      # aberta, abre uma op PARALELA (origem='reentrada')
+                                                      # num sinal forte fresco na MESMA direção — pros
+                                                      # clientes FLAT (saíram na mão/estoparam/logaram
+                                                      # atrasado). Default OFF: id=6 (prod) roda idêntico
+                                                      # à V2.5. Liga por estrategia.parametros (id de teste).
 }
 
 _IA_MODEL       = "claude-haiku-4-5"
@@ -226,23 +232,37 @@ class ClaudeTraderRule:
         with _lock_operacao(id_ativos_base, id_estrategia) as locked:
             if not locked:
                 # outra execução já está processando este ativo/estratégia agora:
-                # não mexe, só devolve o estado atual pro MT5.
-                op = ClaudeTraderRule._operacao_aberta(id_ativos_base, id_estrategia)
-                return ClaudeTraderRule._contrato_mt5(op), 200
+                # não mexe, só devolve o estado atual pro MT5 (a posição PRINCIPAL).
+                prin = ClaudeTraderRule._principal_aberta(id_ativos_base, id_estrategia)
+                return ClaudeTraderRule._contrato_mt5(prin), 200
 
             cfg = _config_estrategia(id_estrategia)   # defaults V2.4; id pode sobrescrever
-            op = ClaudeTraderRule._operacao_aberta(id_ativos_base, id_estrategia)
+            abertas = ClaudeTraderRule._operacoes_abertas(id_ativos_base, id_estrategia)
 
-            if op:
+            # estado NO INÍCIO do poll — define abrir x gerir, como na V2.5 ("se há posição, gere;
+            # senão, abre"). Garante que uma op fechada DURANTE este poll não dispare nova abertura
+            # no mesmo poll (comportamento idêntico ao anterior).
+            tinha_principal = any((o.get("origem") or "principal") == "principal" for o in abertas)
+            tinha_reentrada = any(o.get("origem") == "reentrada" for o in abertas)
+
+            # gerência das posições abertas (principal e/ou reentrada) — INDEPENDENTES entre si.
+            # Para id=6 (reentrada OFF) há no máximo 1 op → loop equivale à V2.5.
+            for op in abertas:
                 ClaudeTraderRule._gerir(op, preco, id_ativos_base, cfg)
-                op = ClaudeTraderRule._buscar(op["id_operacao"])  # recarrega estado
-            else:
-                # PRIMEIRO TIRO (janela de abertura) tem prioridade; senão, fluxo normal V2.1.
+
+            if not tinha_principal:
+                # sem principal: PRIMEIRO TIRO (janela de abertura) tem prioridade; senão, entrada normal.
                 if not ClaudeTraderRule._talvez_primeiro_tiro(id_ativos_base, id_estrategia, preco, cfg):
                     ClaudeTraderRule._talvez_abrir(id_ativos_base, id_estrategia, preco, cfg)
-                op = ClaudeTraderRule._operacao_aberta(id_ativos_base, id_estrategia)
+            elif cfg.get("reentrada") and not tinha_reentrada:
+                # principal aberta + trilho ligado + sem reentrada ativa → tenta reentrada (sinal fresco).
+                principal = ClaudeTraderRule._principal_aberta(id_ativos_base, id_estrategia)
+                if principal:
+                    ClaudeTraderRule._talvez_reentrada(id_ativos_base, id_estrategia, preco, cfg, principal)
 
-        return ClaudeTraderRule._contrato_mt5(op), 200
+            prin = ClaudeTraderRule._principal_aberta(id_ativos_base, id_estrategia)
+
+        return ClaudeTraderRule._contrato_mt5(prin), 200
 
     # ------------------------------------------------------------------ CÉREBRO
     @staticmethod
@@ -295,6 +315,7 @@ class ClaudeTraderRule:
             "id_market_analysis": _market_analysis_id(id_ativos_base),
             "id_intraday_origem": sinal.get("id_intraday_analysis"),
             "id_estrategia":      id_estrategia,
+            "origem":             "principal",
             "tipo_posicao":       tipo,
             "contratos":          1,
             "preco_entrada":      preco,
@@ -315,6 +336,88 @@ class ClaudeTraderRule:
         })
         ClaudeTraderRule._log(novo, "abertura", "cerebro", preco, None, int(stop),
                               "Abre %s @ %s, stop %s (%s), alvo1 %s alvo2 %s"
+                              % (tipo, preco, int(stop), origem_stop, alvo_1, alvo_2))
+
+    # ------------------------------------------------------------------ REENTRADA (V2.6)
+    @staticmethod
+    def _talvez_reentrada(id_ativos_base, id_estrategia, preco, cfg, principal):
+        """TRILHO DE REENTRADA: com a PRINCIPAL aberta, abre uma op PARALELA (origem='reentrada')
+        quando vem um sinal direcional FORTE e FRESCO na MESMA direção da principal — que o
+        cérebro normalmente IGNORARIA (não piramida a guia). Essa op serve os clientes que estão
+        FLAT (saíram na mão, estoparam ou logaram atrasado): o consumidor (/ordem) entrega a
+        reentrada só pra quem está flat, sem tocar quem segue a principal.
+
+        NÃO mexe na principal. Mesma lógica de stop/alvo da entrada normal (níveis do próprio
+        sinal). 1 reentrada por vez (gated em processar) e 1 por sinal (_ja_operou_sinal).
+        Direção CONTRÁRIA não é reentrada — é flip, tratado em _gerir na principal."""
+        sinal = _ultimo_sinal(id_ativos_base)
+        if not sinal:
+            return
+        direcao = sinal.get("ai_direcao")
+        if direcao not in ("compra", "venda"):
+            return  # neutro → não reentra
+        tipo = "buy" if direcao == "compra" else "sell"
+
+        # só MESMA direção da principal (reafirmação). Contrário = flip (a principal trata).
+        if tipo != principal["tipo_posicao"]:
+            return
+
+        # FILTRO DE VOLUME (idem entrada normal): rompimento sem volume tende a falhar.
+        vol_min = cfg.get("vol_min")
+        vol_rel = sinal.get("bova11_vol_rel")
+        if vol_min is not None and vol_rel is not None and float(vol_rel) < float(vol_min):
+            return
+
+        # fim de pregão: não abre reentrada perto do fechamento
+        if _hhmm(_now()) >= cfg["fim_pregao_hhmm"]:
+            return
+
+        # 1 entrada por sinal — não reabre reentrada no mesmo candle (e não duplica o sinal da
+        # principal, que já consta como operado).
+        sid = sinal.get("id_intraday_analysis")
+        if sid and ClaudeTraderRule._ja_operou_sinal(sid):
+            return
+
+        # STOP/ALVO do próprio sinal (mesma regra da entrada normal: ai_stop válido, senão fixo).
+        sfp = cfg["stop_fixo_pts"]
+        ai_stop = sinal.get("ai_stop_loss")
+        if cfg["stop_normal"] == "ia" and ai_stop and \
+           ((tipo == "buy" and ai_stop < preco) or (tipo == "sell" and ai_stop > preco)):
+            stop = int(ai_stop)
+            origem_stop = "ia"
+        else:
+            stop = (preco - sfp) if tipo == "buy" else (preco + sfp)
+            origem_stop = "fixo" if cfg["stop_normal"] != "ia" else "fallback"
+
+        alvo_1 = int(sinal["ai_alvo_1"]) if sinal.get("ai_alvo_1") else None
+        alvo_2 = int(sinal["ai_alvo_2"]) if sinal.get("ai_alvo_2") else None
+
+        novo = ClaudeTraderModel().save({
+            "id_ativos_base":     id_ativos_base,
+            "id_market_analysis": _market_analysis_id(id_ativos_base),
+            "id_intraday_origem": sinal.get("id_intraday_analysis"),
+            "id_estrategia":      id_estrategia,
+            "origem":             "reentrada",
+            "tipo_posicao":       tipo,
+            "contratos":          1,
+            "preco_entrada":      preco,
+            "stop_inicial":       int(stop),
+            "stop_loss":          int(stop),
+            "stop_gain":          None,        # cavalga com proteção por alvo (igual entrada normal)
+            "alvo_1":             alvo_1,
+            "alvo_2":             alvo_2,
+            "protegido_nivel":    0,
+            "status":             "aberta",
+            "acao_mt5":           "abrir",
+            "modo":               "real",
+            "abertura_em":        _now().strftime("%Y-%m-%d %H:%M:%S"),
+            "mfe_pontos":         0,
+            "mae_pontos":         0,
+            "motivo":             "Reentrada: sinal %s | stop %s (%s) alvo1 %s alvo2 %s"
+                                  % (direcao, int(stop), origem_stop, alvo_1, alvo_2),
+        })
+        ClaudeTraderRule._log(novo, "abertura", "cerebro", preco, None, int(stop),
+                              "Reentrada %s @ %s, stop %s (%s), alvo1 %s alvo2 %s"
                               % (tipo, preco, int(stop), origem_stop, alvo_1, alvo_2))
 
     # ------------------------------------------------------------------ PRIMEIRO TIRO
@@ -354,6 +457,7 @@ class ClaudeTraderRule:
             "id_market_analysis": _market_analysis_id(id_ativos_base),
             "id_intraday_origem": None,
             "id_estrategia":      id_estrategia,
+            "origem":             "principal",
             "tipo_posicao":       tipo,
             "contratos":          1,
             "preco_entrada":      preco,
@@ -559,6 +663,26 @@ class ClaudeTraderRule:
         return r[0] if r else None
 
     @staticmethod
+    def _operacoes_abertas(id_ativos_base, id_estrategia):
+        """TODAS as ops abertas da estratégia (V2.6: principal + reentrada). Para id=6
+        (reentrada OFF) há no máximo 1 → equivale ao _operacao_aberta. Ordena ASC para
+        gerir a principal antes da reentrada (determinístico)."""
+        return (ClaudeTraderModel()
+                .where(["id_ativos_base", "=", id_ativos_base])
+                .where(["status", "=", "aberta"])
+                .where(["id_estrategia", "=", id_estrategia])
+                .order("id_operacao", "ASC").find()) or []
+
+    @staticmethod
+    def _principal_aberta(id_ativos_base, id_estrategia):
+        """A op PRINCIPAL aberta (origem='principal'). É a que o contrato do /equalizar
+        devolve. Ops legadas sem origem contam como principal."""
+        for op in ClaudeTraderRule._operacoes_abertas(id_ativos_base, id_estrategia):
+            if (op.get("origem") or "principal") == "principal":
+                return op
+        return None
+
+    @staticmethod
     def _buscar(id_operacao):
         r = ClaudeTraderModel().where(["id_operacao", "=", id_operacao]).limit(1).find()
         return r[0] if r else None
@@ -635,7 +759,7 @@ class ClaudeTraderRule:
                 raw = raw.split("```")[1]
                 if raw.startswith("json"):
                     raw = raw[4:]
-            return json.loads(raw.strip())
+            return json.loads(raw.strip(), strict=False)  # tolera caractere de controle cru do modelo
         except Exception:
             return None
 

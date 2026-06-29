@@ -416,7 +416,10 @@ def _call_claude(macro: dict, technical: dict, system_prompt: str):
             raw_text = raw_text[4:]
 
     try:
-        return json.loads(raw_text)
+        # strict=False: o modelo às vezes coloca caractere de controle CRU (quebra-linha
+        # literal etc.) dentro de uma string longa (ex.: justificativa). O parser estrito
+        # rejeita ("Invalid control character"); strict=False aceita, sem perder dado.
+        return json.loads(raw_text, strict=False)
     except json.JSONDecodeError as e:
         # mostra início E fim do texto (não só o começo) pra ver onde realmente quebra
         raise RuntimeError(

@@ -1,6 +1,7 @@
 import math
 import json
 import ssl
+import time
 import urllib.request
 import urllib.parse
 from datetime import date, timedelta, datetime as _dt
@@ -491,11 +492,15 @@ class YahooFinanceClient:
                 if v is not None and v > 0:
                     raw_volumes.append(int(v))
 
-            if not candles or not raw_volumes:
+            if not candles or len(raw_volumes) < 2:
                 return None, "Sem dados suficientes"
 
-            current_vol = raw_volumes[-1]
-            history     = raw_volumes[:-1][-avg_periods:]
+            # SANEAMENTO 1 — barra em formação: a ÚLTIMA barra intraday do yfinance é a barra
+            # ATUAL ainda enchendo (volume PARCIAL → RVOL falso-baixo, ex.: 0.02/0.04). Usa a
+            # última barra COMPLETA (penúltima) e a média das anteriores a ela. Sem isso, o
+            # filtro de volume lê "rompimento sem volume" em pleno movimento (caso 26/06).
+            current_vol = raw_volumes[-2]
+            history     = raw_volumes[:-2][-avg_periods:]
 
             if not history:
                 return None, "Histórico insuficiente"
@@ -503,8 +508,21 @@ class YahooFinanceClient:
             avg_vol = sum(history) / len(history)
             vol_rel = round(current_vol / avg_vol, 2) if avg_vol > 0 else None
 
+            # SANEAMENTO 2 — feed congelado: se a série não avança (última barra velha demais),
+            # o yfinance está devolvendo dado STALE (ex.: o MESMO volume repetido por >1h, como
+            # 160814 em 6 leituras no 26/06). Marca vol_rel=None ("indisponível") em vez de um
+            # número falso — o downstream (filtro de exaustão, veto de volume do cérebro) já trata
+            # None como "sem dado / não vetar", então um feed quebrado para de suprimir sinais.
+            try:
+                interval_s = int("".join(ch for ch in str(interval) if ch.isdigit())) * 60
+            except Exception:
+                interval_s = 900
+            ultima_ts = candles[-1].get("datetime") or 0
+            if ultima_ts and (time.time() - ultima_ts) > (3 * interval_s):
+                vol_rel = None  # feed parado → não confiar no volume
+
             if vol_rel is None:
-                nivel = None
+                nivel = "indisponivel"
             elif vol_rel >= 2.0:
                 nivel = "muito_alto"
             elif vol_rel >= 1.5:
@@ -516,9 +534,14 @@ class YahooFinanceClient:
             else:
                 nivel = "muito_baixo"
 
+            # preço do BOVA11 (último close do feed) — gravado só p/ VALIDAÇÃO/auditoria: dá pra
+            # comparar com o Google e flagrar divergência (feed stale/quebrado). Não entra na decisão.
+            preco = candles[-1].get("close")
+
             return {
                 "volume":     current_vol,
-                "avg_volume": round(avg_vol),
+                "preco":      preco,
+                "avg_volume": round(avg_vol) if avg_vol else None,
                 "vol_rel":    vol_rel,
                 "nivel":      nivel,
                 "candles":    candles,

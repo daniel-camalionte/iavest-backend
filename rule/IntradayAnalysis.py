@@ -56,7 +56,7 @@ Referências de contexto do dia (use obrigatoriamente na análise):
 - prev_day_high/low/close: níveis estruturais do dia anterior. Preço acima de prev_day_high é breakout bullish; abaixo de prev_day_low é breakout bearish.
 - opening_range_high/low: máxima e mínima dos primeiros 30min (09:00–09:30). Rompimento acima do OR é sinal de compra; abaixo é sinal de venda. Preço dentro do OR = indefinição. IMPORTANTE: quando preco_vs_or = dentro_do_opening_range, prefira FORTEMENTE "neutro" — o miolo do range é lateralização e historicamente tem baixa taxa de acerto (backtest: ~38% dentro do range vs ~56% em rompimento). Só assuma direção com rompimento confirmado.
 - dolfut_proxy: USD/BRL tem correlação INVERSA com WIN. impacto_win=bearish significa dólar subindo → pressão vendedora no WIN. impacto_win=bullish significa dólar caindo → pressão compradora no WIN. impacto_win=neutro significa dólar praticamente de lado (variação irrelevante) → NÃO use o dólar como confluência nem como risco; trate-o como fator ausente. Atenção: o dólar é apenas um fator de contexto fraco — não o use como motivo principal de uma decisão.
-- bova11_volume: volume real do ETF BOVA11 (mesma bolsa B3, mesmos horários). vol_rel compara o candle atual com a média dos últimos 20. vol_rel > 1.5 = movimento com convicção; vol_rel < 0.5 = movimento fraco, não confiar em rompimentos.
+- bova11_volume: volume real do ETF BOVA11 (mesma bolsa B3, mesmos horários). vol_rel compara o candle atual com a média dos últimos 20. vol_rel > 1.5 = movimento com convicção; vol_rel < 0.5 = movimento fraco, não confiar em rompimentos. IMPORTANTE: se nivel = "indisponivel" (ou vol_rel ausente/null), o feed de volume está indisponível/não confiável neste momento — NÃO use o volume como fator (nem a favor, nem contra); decida pela estrutura de preço, momentum e níveis.
 - indicadores_5min: mesmo ativo no timeframe de 5min. Use para confirmar ou questionar o sinal do 15min. tf5_alinhamento=alinhado_compra/venda = sinal forte; conflitante = cautela extra.
 - ema_sinal: direção atual das EMAs (alta/baixa) ou cruzamento recente (bullish_cross/bearish_cross). Cruzamento recente é sinal mais forte.
 - candle_age_min: minutos entre o candle analisado e o horário atual. Se > 20min, dados estão defasados — aumentar cautela na análise.
@@ -384,7 +384,10 @@ def _parse_haiku(text):
         if text.startswith("json"):
             text = text[4:]
     try:
-        return json.loads(text.strip())
+        # strict=False: o Haiku às vezes solta caractere de controle cru (quebra-linha
+        # literal) dentro de uma string longa — o parser estrito falharia e o sinal viria
+        # vazio silenciosamente.
+        return json.loads(text.strip(), strict=False)
     except Exception:
         return {}
 
@@ -865,6 +868,7 @@ class IntradayAnalysisRule:
             "dolfut_price":       dolfut.get("price")      if dolfut else None,
             "dolfut_chg_pct":     dolfut.get("change_pct") if dolfut else None,
             "bova11_volume":      bova11.get("volume")     if bova11 else None,
+            "bova11_preco":       bova11.get("preco")      if bova11 else None,
             "bova11_vol_rel":     bova11.get("vol_rel")    if bova11 else None,
             "bova11_vol_nivel":   bova11.get("nivel")      if bova11 else None,
             "ai_direcao":         ai.get("ai_direcao", "neutro"),

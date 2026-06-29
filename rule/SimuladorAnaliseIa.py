@@ -155,7 +155,7 @@ class SimuladorAnaliseIaRule:
                 raw = raw.split("```")[1]
                 if raw.startswith("json"):
                     raw = raw[4:]
-            return json.loads(raw.strip())
+            return json.loads(raw.strip(), strict=False)  # tolera caractere de controle cru do modelo
         except Exception:
             return None
 
