@@ -62,7 +62,9 @@ _CONFIG_DEFAULT = {
     "stop_normal":            "ia",                   # entradas normais: "ia"=ai_stop_loss; "fixo"=stop_fixo_pts
     "stop_fixo_pts":          STOP_CURTO_PTS,         # 100 (fallback / "fixo" / stop do primeiro tiro)
     "vol_min":                VOL_REL_MIN,            # 0.8; None = sem filtro de volume
-    "primeiro_tiro":          True,                   # liga/desliga a aposta da abertura
+    "primeiro_tiro":          False,                  # DESLIGADO: sem tiro no 1o candle. Parece
+                                                      # promissor mas precisa de mais dados —
+                                                      # re-ligar (True) quando houver amostra.
     "primeiro_tiro_gain":     PRIMEIRO_TIRO_GAIN,     # 300
     "primeiro_tiro_ate_hhmm": PRIMEIRO_TIRO_ATE_HHMM, # 910
     "fim_pregao_hhmm":        FIM_PREGAO_HHMM,        # 1745

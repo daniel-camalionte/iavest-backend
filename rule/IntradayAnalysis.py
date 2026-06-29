@@ -30,6 +30,13 @@ _HEALTH_SINAL_WARN_MIN = 25  # sem sinal novo há muito tempo
 # elevando o acerto de 43.6% para 47.2% (+895 pts). Só o lado VENDA foi validado.
 _EXHAUSTION_VOL_REL_MAX = 0.5
 
+# DIRECAO OPERAVEL (espelho do cerebro para o painel do cliente). Estes limiares devem
+# CASAR com os do cerebro (VOL_REL_MIN e FIM_PREGAO_HHMM em rule/ClaudeTrader.py, default
+# da estrategia de prod id=6). Servem so para DERIVAR direcao_operavel — nao alteram a
+# decisao de trade nem o ai_direcao raw (que continua mandando na saida/flip e no backtest).
+_DISPLAY_VOL_REL_MIN    = 0.8
+_DISPLAY_FIM_PREGAO_HHMM = 1745
+
 
 def _is_b3_open(now_br):
     """Retorna True se o pregão B3 está aberto (seg-sex, 09:00–17:55 BRT)."""
@@ -828,6 +835,21 @@ class IntradayAnalysisRule:
                     else:
                         ai["ai_relacao_rr"] = f"1:{rr_1}"
 
+        # 7c. DIRECAO OPERAVEL — espelho do cerebro p/ o painel do cliente. Pega a direcao
+        # FINAL do intraday e aplica os vetos SEM ESTADO que o cerebro usa ao ABRIR (volume
+        # fraco e fim de pregao). Assim o painel so mostra direcional quando o robo de fato
+        # operaria — sem "sinal forte e nada acontece". A SAIDA/flip continua usando o
+        # ai_direcao RAW (proteger capital nao exige volume). Os vetos COM estado (posicao
+        # aberta, anti-whipsaw) o cerebro revalida no poll dele — por isso e "quase" espelho.
+        direcao_operavel = ai.get("ai_direcao", "neutro")
+        if direcao_operavel in ("compra", "venda"):
+            _vr_op   = bova11.get("vol_rel") if bova11 else None
+            _hhmm_op = now_br.hour * 100 + now_br.minute
+            if _vr_op is not None and float(_vr_op) < _DISPLAY_VOL_REL_MIN:
+                direcao_operavel = "neutro"   # volume fraco -> cerebro nao abre
+            elif _hhmm_op >= _DISPLAY_FIM_PREGAO_HHMM:
+                direcao_operavel = "neutro"   # fim de pregao -> cerebro nao abre
+
         # 8. Persiste no banco
         save_data = {
             "id_ativos_base":     id_ativos_base,
@@ -872,6 +894,7 @@ class IntradayAnalysisRule:
             "bova11_vol_rel":     bova11.get("vol_rel")    if bova11 else None,
             "bova11_vol_nivel":   bova11.get("nivel")      if bova11 else None,
             "ai_direcao":         ai.get("ai_direcao", "neutro"),
+            "direcao_operavel":   direcao_operavel,
             "ai_forca":           ai.get("ai_forca"),
             "ai_confianca":       ai.get("ai_confianca"),
             "contra_tendencia":   contra_tendencia,
