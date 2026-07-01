@@ -35,7 +35,7 @@ _EXHAUSTION_VOL_REL_MAX = 0.5
 # da estrategia de prod id=6). Servem so para DERIVAR direcao_operavel — nao alteram a
 # decisao de trade nem o ai_direcao raw (que continua mandando na saida/flip e no backtest).
 _DISPLAY_VOL_REL_MIN    = 0.8
-_DISPLAY_FIM_PREGAO_HHMM = 1745
+_DISPLAY_FIM_PREGAO_HHMM = 1730   # = ABERTURA_ATE_HHMM do cerebro: nao abre nova apos 17:30
 
 
 def _is_b3_open(now_br):
@@ -195,8 +195,13 @@ def _ema_crossover(candles_asc, fast=9, slow=21):
 def _avaliar_resultado(prev, candles_asc, now_br):
     """Avalia se a análise anterior atingiu stop, alvo ou expirou.
     Retorna (resultado, resultado_preco, resultado_direcao, resultado_pontos).
-    resultado_pontos = (saída - entrada) na direção do trade (exit-based)."""
-    direcao = prev.get("ai_direcao")
+    resultado_pontos = (saída - entrada) na direção do trade (exit-based).
+
+    Usa a DIRECAO_OPERAVEL (o que o robô de fato operaria), não o ai_direcao raw: um
+    sinal barrado por volume (operavel=neutro) NÃO gera ganho/perda — porque o robô não
+    o operaria. Assim o painel e a performance batem com o cérebro. Fallback pro raw em
+    registros antigos (direcao_operavel nulo)."""
+    direcao = prev.get("direcao_operavel") or prev.get("ai_direcao")
     stop    = prev.get("ai_stop_loss")
     alvo_1  = prev.get("ai_alvo_1")
     alvo_2  = prev.get("ai_alvo_2")

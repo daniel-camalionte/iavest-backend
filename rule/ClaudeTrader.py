@@ -43,6 +43,9 @@ STOP_CURTO_PTS  = 100           # stop inicial CURTO fixo (controla risco/trade)
                                 # Valor conservador/raciocinado — calibrar com mais dado.
 TRAIL_PCT_PICO  = 0.5            # trail50: trava 50% do pico de lucro (entrada + pico*0.5)
 FIM_PREGAO_HHMM = 1745           # encerra posição a partir de 17:45 (sem overnight)
+ABERTURA_ATE_HHMM = 1730         # NÃO abre posição nova após 17:30: sobrariam só ~15min até o
+                                 # fecho (17:45) — não vale entrar pra segurar 1 candle. Distinto
+                                 # do fim de pregão (que ENCERRA); este limita a ABERTURA.
 VOL_REL_MIN     = 0.8            # FILTRO DE ENTRADA: não abre direcional com volume fraco
                                  # (bova11_vol_rel < 0.8). A própria IA cita "rompimento sem
                                  # volume tende a falhar"; 37% dos sinais saem assim. Análise
@@ -67,7 +70,8 @@ _CONFIG_DEFAULT = {
                                                       # re-ligar (True) quando houver amostra.
     "primeiro_tiro_gain":     PRIMEIRO_TIRO_GAIN,     # 300
     "primeiro_tiro_ate_hhmm": PRIMEIRO_TIRO_ATE_HHMM, # 910
-    "fim_pregao_hhmm":        FIM_PREGAO_HHMM,        # 1745
+    "fim_pregao_hhmm":        FIM_PREGAO_HHMM,        # 1745 (ENCERRA a posição)
+    "abertura_ate_hhmm":      ABERTURA_ATE_HHMM,      # 1730 (última ABERTURA de posição nova)
     "reentrada":              False,                  # TRILHO DE REENTRADA (V2.6): com a principal
                                                       # aberta, abre uma op PARALELA (origem='reentrada')
                                                       # num sinal forte fresco na MESMA direção — pros
@@ -284,8 +288,8 @@ class ClaudeTraderRule:
         if vol_min is not None and vol_rel is not None and float(vol_rel) < float(vol_min):
             return  # volume fraco → não opera o rompimento
 
-        # fim de pregão: não abre posição nova perto do fechamento
-        if _hhmm(_now()) >= cfg["fim_pregao_hhmm"]:
+        # limite de ABERTURA: não abre posição nova após 17:30 (sobrariam ~15min até o fecho)
+        if _hhmm(_now()) >= cfg["abertura_ate_hhmm"]:
             return
 
         # ANTI-WHIPSAW: 1 entrada por sinal — não reabre no mesmo candle intraday
@@ -370,8 +374,8 @@ class ClaudeTraderRule:
         if vol_min is not None and vol_rel is not None and float(vol_rel) < float(vol_min):
             return
 
-        # fim de pregão: não abre reentrada perto do fechamento
-        if _hhmm(_now()) >= cfg["fim_pregao_hhmm"]:
+        # limite de ABERTURA: não abre reentrada após 17:30 (sobrariam ~15min até o fecho)
+        if _hhmm(_now()) >= cfg["abertura_ate_hhmm"]:
             return
 
         # 1 entrada por sinal — não reabre reentrada no mesmo candle (e não duplica o sinal da
