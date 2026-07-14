@@ -131,3 +131,16 @@ google = {
 planos = {
     "ANALISE_IA": [int(p) for p in os.environ.get("PLANOS_ANALISE_IA", "3,7").split(",") if p.strip().isdigit()],
 }
+
+# LOKI — monitoramento de logs via HTTP push (Grafana Cloud)
+loki = {
+    "URL":   os.environ.get("LOKI_URL", ""),
+    "USER":  os.environ.get("LOKI_USER", ""),
+    "TOKEN": os.environ.get("LOKI_TOKEN", ""),
+    "ENV":   os.environ.get("LOKI_ENV", ""),
+}
+
+# CLAUDE ANALISE — senha propria da rota /claude-trader/operacao-analise (acesso externo, sem JWT)
+claude_analise = {
+    "KEY": os.environ.get("CLAUDE_ANALISE_KEY", "")
+}

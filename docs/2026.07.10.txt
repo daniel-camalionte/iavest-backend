@@ -1,0 +1,120 @@
+
+12:30  >> ENTRADA VENDA-CURTA  (confianca da meta 0.59)
+     META softmax: nada 0.00 | compra-L 0.12 | compra-C 0.16 | venda-L 0.13 | venda-C 0.59
+     posicao 178345 | SL 178945 | SG 177745 | candle medio 600 pts
+     analista atribuido: selene_C1 (conf 0.61)
+     >> analistas:
+        sirus_C1 [compra] ativacao 0.51 | nao ativou (max NADA 0.48)  (nada 0.48 longa 0.29 curta 0.23)
+        sirus_C2 [compra] ativacao 0.51 | nao ativou (max NADA 0.40)  (nada 0.40 longa 0.35 curta 0.25)
+        sirus_C3 [compra] ativacao 0.51 | nao ativou (max LONGA 0.50)  (nada 0.33 longa 0.50 curta 0.17)
+        selene_C1 [venda] ativacao 0.51 | ATIVOU -> CURTA  (nada 0.23 longa 0.16 curta 0.61)
+        selene_C2 [venda] ativacao 0.51 | ATIVOU -> CURTA  (nada 0.22 longa 0.24 curta 0.54)
+        selene_C3 [venda] ativacao 0.51 | nao ativou (max NADA 0.37)  (nada 0.37 longa 0.29 curta 0.34)
+     FUNDAMENTALISTAS:
+        fund1 -> COMPRA  (compra 0.39 venda 0.30 indef 0.31)
+        fund2 -> COMPRA  (compra 0.36 venda 0.29 indef 0.35)
+        fund3 -> VENDA  (compra 0.34 venda 0.37 indef 0.29)
+     >> 63 sinais ativos:
+       [rompimento venda] (1):
+          win_accelerator__romp_venda = oscilador Accelerator (AC, Bill Williams)
+       [reversao compra] (2):
+          wdo_tirone__romp_venda~INV = niveis de Tirone (suporte/resistencia)
+          win_demarker__rev_venda~INV = oscilador DeMarker
+       [reversao venda] (1):
+          win_padrao_velas__rev_compra~INV = padrao de velas (candlestick)
+
+12:45  >> ENTRADA VENDA-CURTA  (confianca da meta 0.64)
+     META softmax: nada 0.00 | compra-L 0.11 | compra-C 0.13 | venda-L 0.12 | venda-C 0.64
+     posicao 178430 | SL 178984 | SG 177876 | candle medio 554 pts
+     analista atribuido: selene_C1 (conf 0.64)
+     >> analistas:
+        sirus_C1 [compra] ativacao 0.51 | nao ativou (max NADA 0.48)  (nada 0.48 longa 0.29 curta 0.23)
+        sirus_C2 [compra] ativacao 0.51 | nao ativou (max NADA 0.41)  (nada 0.41 longa 0.32 curta 0.27)
+        sirus_C3 [compra] ativacao 0.51 | nao ativou (max LONGA 0.50)  (nada 0.34 longa 0.50 curta 0.16)
+        selene_C1 [venda] ativacao 0.51 | ATIVOU -> CURTA  (nada 0.21 longa 0.15 curta 0.64)
+        selene_C2 [venda] ativacao 0.51 | ATIVOU -> CURTA  (nada 0.19 longa 0.22 curta 0.59)
+        selene_C3 [venda] ativacao 0.51 | nao ativou (max NADA 0.37)  (nada 0.37 longa 0.28 curta 0.35)
+     FUNDAMENTALISTAS:
+        fund1 -> COMPRA  (compra 0.39 venda 0.30 indef 0.31)
+        fund2 -> COMPRA  (compra 0.36 venda 0.29 indef 0.35)
+        fund3 -> VENDA  (compra 0.34 venda 0.37 indef 0.29)
+     >> 63 sinais ativos:
+       [rompimento venda] (1):
+          win_accelerator__romp_venda = oscilador Accelerator (AC, Bill Williams)
+       [reversao compra] (1):
+          wdo_tirone__romp_venda~INV = niveis de Tirone (suporte/resistencia)
+       [reversao venda] (2):
+          win_kama__romp_compra~INV = media adaptativa de Kaufman (KAMA)
+          win_padrao_velas__rev_compra~INV = padrao de velas (candlestick)
+
+13:00  >> ENTRADA VENDA-CURTA  (confianca da meta 0.57)
+     META softmax: nada 0.00 | compra-L 0.13 | compra-C 0.16 | venda-L 0.15 | venda-C 0.57
+     posicao 178815 | SL 179339 | SG 178291 | candle medio 524 pts
+     analista atribuido: selene_C1 (conf 0.61)
+     >> analistas:
+        sirus_C1 [compra] ativacao 0.51 | nao ativou (max NADA 0.43)  (nada 0.43 longa 0.33 curta 0.24)
+        sirus_C2 [compra] ativacao 0.51 | nao ativou (max NADA 0.39)  (nada 0.39 longa 0.34 curta 0.27)
+        sirus_C3 [compra] ativacao 0.51 | ATIVOU -> LONGA  (nada 0.32 longa 0.53 curta 0.16)
+        selene_C1 [venda] ativacao 0.51 | ATIVOU -> CURTA  (nada 0.24 longa 0.15 curta 0.61)
+        selene_C2 [venda] ativacao 0.51 | ATIVOU -> CURTA  (nada 0.22 longa 0.22 curta 0.56)
+        selene_C3 [venda] ativacao 0.51 | nao ativou (max NADA 0.41)  (nada 0.41 longa 0.27 curta 0.32)
+     FUNDAMENTALISTAS:
+        fund1 -> COMPRA  (compra 0.39 venda 0.30 indef 0.31)
+        fund2 -> COMPRA  (compra 0.36 venda 0.29 indef 0.35)
+        fund3 -> VENDA  (compra 0.34 venda 0.37 indef 0.29)
+     >> 63 sinais ativos:
+       [rompimento compra] (1):
+          win_dunnigan__romp_compra = sistema Dunnigan
+       [rompimento venda] (1):
+          win_accelerator__romp_venda = oscilador Accelerator (AC, Bill Williams)
+       [reversao compra] (2):
+          wdo_tirone__romp_venda~INV = niveis de Tirone (suporte/resistencia)
+          win_rvi__romp_compra = indice de vigor relativo (RVI)
+
+13:15  >> ENTRADA VENDA-CURTA  (confianca da meta 0.55)
+     META softmax: nada 0.00 | compra-L 0.15 | compra-C 0.19 | venda-L 0.11 | venda-C 0.55
+     posicao 179155 | SL 179655 | SG 178655 | candle medio 500 pts
+     analista atribuido: selene_C1 (conf 0.59)
+     >> analistas:
+        sirus_C1 [compra] ativacao 0.51 | nao ativou (max NADA 0.42)  (nada 0.42 longa 0.34 curta 0.24)
+        sirus_C2 [compra] ativacao 0.51 | nao ativou (max NADA 0.37)  (nada 0.37 longa 0.33 curta 0.30)
+        sirus_C3 [compra] ativacao 0.51 | ATIVOU -> LONGA  (nada 0.31 longa 0.54 curta 0.15)
+        selene_C1 [venda] ativacao 0.51 | ATIVOU -> CURTA  (nada 0.25 longa 0.16 curta 0.59)
+        selene_C2 [venda] ativacao 0.51 | ATIVOU -> CURTA  (nada 0.25 longa 0.19 curta 0.56)
+        selene_C3 [venda] ativacao 0.51 | nao ativou (max NADA 0.46)  (nada 0.46 longa 0.25 curta 0.30)
+     FUNDAMENTALISTAS:
+        fund1 -> COMPRA  (compra 0.39 venda 0.30 indef 0.31)
+        fund2 -> COMPRA  (compra 0.36 venda 0.29 indef 0.35)
+        fund3 -> VENDA  (compra 0.34 venda 0.37 indef 0.29)
+     >> 63 sinais ativos:
+       [rompimento compra] (3):
+          win_didi__romp_compra = Didi Index (agulhadas de medias)
+          win_dunnigan__romp_compra = sistema Dunnigan
+          win_sar__rev_compra = SAR parabolico
+       [reversao compra] (2):
+          wdo_tirone__romp_venda~INV = niveis de Tirone (suporte/resistencia)
+          win_hma__romp_compra = media movel de Hull (HMA)
+
+13:15  >> ENTRADA VENDA-CURTA  (confianca da meta 0.55)
+     META softmax: nada 0.00 | compra-L 0.15 | compra-C 0.19 | venda-L 0.11 | venda-C 0.55
+     posicao 179155 | SL 179655 | SG 178655 | candle medio 500 pts
+     analista atribuido: selene_C1 (conf 0.59)
+     >> analistas:
+        sirus_C1 [compra] ativacao 0.51 | nao ativou (max NADA 0.42)  (nada 0.42 longa 0.34 curta 0.24)
+        sirus_C2 [compra] ativacao 0.51 | nao ativou (max NADA 0.37)  (nada 0.37 longa 0.33 curta 0.30)
+        sirus_C3 [compra] ativacao 0.51 | ATIVOU -> LONGA  (nada 0.31 longa 0.54 curta 0.15)
+        selene_C1 [venda] ativacao 0.51 | ATIVOU -> CURTA  (nada 0.25 longa 0.16 curta 0.59)
+        selene_C2 [venda] ativacao 0.51 | ATIVOU -> CURTA  (nada 0.25 longa 0.19 curta 0.56)
+        selene_C3 [venda] ativacao 0.51 | nao ativou (max NADA 0.46)  (nada 0.46 longa 0.25 curta 0.30)
+     FUNDAMENTALISTAS:
+        fund1 -> COMPRA  (compra 0.39 venda 0.30 indef 0.31)
+        fund2 -> COMPRA  (compra 0.36 venda 0.29 indef 0.35)
+        fund3 -> VENDA  (compra 0.34 venda 0.37 indef 0.29)
+     >> 63 sinais ativos:
+       [rompimento compra] (3):
+          win_didi__romp_compra = Didi Index (agulhadas de medias)
+          win_dunnigan__romp_compra = sistema Dunnigan
+          win_sar__rev_compra = SAR parabolico
+       [reversao compra] (2):
+          wdo_tirone__romp_venda~INV = niveis de Tirone (suporte/resistencia)
+          win_hma__romp_compra = media movel de Hull (HMA)

@@ -635,6 +635,45 @@
         }
       }
     },
+    "/claude-trader/operacao-analise": {
+      "post": {
+        "tags": ["Claude Trader"],
+        "summary": "Fila de análise — insere ordem PROPOSTA (cérebro novo)",
+        "description": "Recebe uma ordem proposta pela inteligência nova e grava em claude_trader_operacao_analise com analise='pendente'. NÃO vai pra EA — fica retida até aprovação (fase futura). Sem JWT: autenticação por senha própria no payload (campo password = CLAUDE_ANALISE_KEY). Uso: aplicação externa não logada. Campos de execução/resultado são protegidos (a rule ignora o que a inteligência não deve setar).",
+        "consumes": ["application/json"],
+        "produces": ["application/json"],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["password", "id_estrategia", "posicao", "preco_entrada"],
+              "properties": {
+                "password":       { "type": "string",  "description": "CLAUDE_ANALISE_KEY (senha própria da rota)" },
+                "id_estrategia":  { "type": "integer", "example": 8 },
+                "posicao":        { "type": "string",  "enum": ["buy", "sell"], "example": "sell", "description": "direção dura pra execução" },
+                "tipo_posicao":   { "type": "string",  "description": "resumo livre da entrada, ex: 'venda-curta', 'entrada longa'" },
+                "preco_entrada":  { "type": "integer", "example": 178345 },
+                "stop_inicial":   { "type": "integer", "example": 178945 },
+                "stop_loss":      { "type": "integer", "example": 178945 },
+                "stop_gain":      { "type": "integer", "example": 177745 },
+                "id_ativos_base": { "type": "integer", "default": 1, "description": "1 = WIN" },
+                "alvo_1":         { "type": "integer" },
+                "alvo_2":         { "type": "integer" },
+                "motivo":         { "type": "string",  "example": "cerebro novo - venda curta meta 0.59" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "201": { "description": "Inserido na fila. Ex.: { \"id_operacao\": 123, \"analise\": \"pendente\" }" },
+          "401": { "description": "Senha incorreta" },
+          "422": { "description": "Campo obrigatório faltando ou tipo_posicao inválido" }
+        }
+      }
+    },
     "/simulador/ordem/{id_ordem}/analise-ia": {
       "get": {
         "tags": ["Simulador de Ordens"],

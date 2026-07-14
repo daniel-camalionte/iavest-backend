@@ -1,11 +1,12 @@
 import os
+import time
 from dotenv import load_dotenv
 
 env = os.environ.get("FLASK_ENV", "prd")
 env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), f".env.{env}")
 load_dotenv(env_file)
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, g
 from flask_restful import Api
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity
@@ -15,6 +16,7 @@ from blacklist import BLACKLIST
 
 import appController
 import config.env as memory
+from library import Loki
 
 
 app = Flask(__name__)
@@ -57,6 +59,39 @@ CORS(app, resources={
         "origins": ["https://www.iavest.com.br", "https://iavest.com.br"]
     }
 })
+
+# ── Monitoramento (Loki) ─────────────────────────────────────────────
+# Loga no Grafana Cloud as requests das rotas de cron/analise: saber se a
+# cron esta batendo, tempo de resposta e status. Fire-and-forget: nunca
+# afeta a request.
+_ROTAS_MONITORADAS = ("/claude-trader/", "/market/intraday", "/market/analyze")
+
+
+@app.before_request
+def _monitor_inicia():
+    g._monitor_t0 = time.time()
+
+
+@app.after_request
+def _monitor_loga(resp):
+    try:
+        rota = request.path
+        if any(rota.startswith(p) for p in _ROTAS_MONITORADAS):
+            ms = int((time.time() - getattr(g, "_monitor_t0", time.time())) * 1000)
+            rota_label = request.url_rule.rule if request.url_rule else rota
+            account = request.args.get("account_number") or request.args.get("account") or ""
+            Loki.log(
+                f"{request.method} {rota}",
+                nivel="info" if resp.status_code < 400 else "erro",
+                rota=rota_label,
+                status=resp.status_code,
+                ms=ms,
+                account=account,
+            )
+    except Exception:
+        pass  # monitoramento nunca quebra a request
+    return resp
+# ─────────────────────────────────────────────────────────────────────
 
 #Version
 api.add_resource(appController.VersionController, '/version')
@@ -171,6 +206,9 @@ api.add_resource(appController.SimuladorAnaliseIaController, '/simulador/ordem/<
 
 #Claude Trader (execução intraday profissional)
 api.add_resource(appController.ClaudeTraderEqualizarController, '/claude-trader/equalizar')
+
+#Claude Trader — fila de análise (inteligência nova insere ordens propostas; sem JWT, senha própria)
+api.add_resource(appController.ClaudeTraderOperacaoAnaliseController, '/claude-trader/operacao-analise')
 
 #touch ~/apps_wsgi/stg.wsgi
 

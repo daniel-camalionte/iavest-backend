@@ -38,6 +38,7 @@ class ClaudeTraderModel(BaseModel):
             "mfe_pontos":         "mfe_pontos",
             "mae_pontos":         "mae_pontos",
             "motivo":             "motivo",
+            "id_operacao_analise": "id_operacao_analise",
             "created_at":         "created_at",
             "updated_at":         "updated_at",
         }
