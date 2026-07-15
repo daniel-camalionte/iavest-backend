@@ -670,7 +670,23 @@
         "responses": {
           "201": { "description": "Inserido na fila. Ex.: { \"id_operacao\": 123, \"analise\": \"pendente\" }" },
           "401": { "description": "Senha incorreta" },
-          "422": { "description": "Campo obrigatório faltando ou tipo_posicao inválido" }
+          "422": { "description": "Campo obrigatório faltando ou posicao inválida" }
+        }
+      }
+    },
+    "/claude-trader/operacao-analise/processar": {
+      "get": {
+        "tags": ["Claude Trader"],
+        "summary": "Analisador da fila (Fase 2 — schedule)",
+        "description": "Chamado por schedule (~1min). Pega até `limite` propostas pendentes; o Claude Haiku aprova/reprova cada uma (com base no fundamentalista do dia + intraday mais próximo + o motivo do sinal), grava o veredito em claude_trader_operacao_analise_veredito, atualiza analise (aprovado|reprovado|erro após 3 falhas) e replica pra claude_trader_operacao. Toggle CLAUDE_ANALISE_ENFORCE: false=modo sombra (sempre replica), true=reprovado bloqueia. Auth via SCHEDULER_SECRET.",
+        "produces": ["application/json"],
+        "parameters": [
+          { "name": "X-Scheduler-Secret", "in": "header", "required": false, "type": "string", "description": "SCHEDULER_SECRET da env." },
+          { "name": "limite", "in": "query", "required": false, "type": "integer", "default": 5, "description": "Máx. de pendentes por chamada." }
+        ],
+        "responses": {
+          "200": { "description": "Ex.: { \"processados\": 2, \"enforce\": false, \"detalhes\": [ { \"id_operacao_analise\": 5, \"veredito\": \"aprovado\", \"id_operacao_replicada\": 42 } ] }" },
+          "401": { "description": "Scheduler secret inválido ou ausente" }
         }
       }
     },

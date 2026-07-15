@@ -140,7 +140,9 @@ loki = {
     "ENV":   os.environ.get("LOKI_ENV", ""),
 }
 
-# CLAUDE ANALISE — senha propria da rota /claude-trader/operacao-analise (acesso externo, sem JWT)
+# CLAUDE ANALISE — rota /claude-trader/operacao-analise (senha propria) + analisador (Fase 2).
+# ENFORCE: "false" = modo sombra (analisa, registra, SEMPRE replica); "true" = reprovado bloqueia.
 claude_analise = {
-    "KEY": os.environ.get("CLAUDE_ANALISE_KEY", "")
+    "KEY":     os.environ.get("CLAUDE_ANALISE_KEY", ""),
+    "ENFORCE": os.environ.get("CLAUDE_ANALISE_ENFORCE", "false"),
 }

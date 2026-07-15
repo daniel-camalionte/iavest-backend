@@ -210,6 +210,9 @@ api.add_resource(appController.ClaudeTraderEqualizarController, '/claude-trader/
 #Claude Trader — fila de análise (inteligência nova insere ordens propostas; sem JWT, senha própria)
 api.add_resource(appController.ClaudeTraderOperacaoAnaliseController, '/claude-trader/operacao-analise')
 
+#Claude Trader — analisador da fila (schedule: Haiku aprova/reprova + replica; SCHEDULER_SECRET)
+api.add_resource(appController.ClaudeTraderOperacaoAnaliseProcessarController, '/claude-trader/operacao-analise/processar')
+
 #touch ~/apps_wsgi/stg.wsgi
 
 
