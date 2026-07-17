@@ -18,6 +18,7 @@ class ClaudeTraderOperacaoAnaliseVeredictoModel(BaseModel):
             "id_veredito":             "id_veredito",
             "id_operacao_analise":     "id_operacao_analise",
             "veredito":                "veredito",
+            "regra":                   "regra",
             "confianca":               "confianca",
             "fundamentalista_direcao": "fundamentalista_direcao",
             "intraday_direcao":        "intraday_direcao",

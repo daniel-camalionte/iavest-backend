@@ -9,6 +9,7 @@ from model.ClaudeTraderOperacaoAnaliseVeredito import ClaudeTraderOperacaoAnalis
 from model.ClaudeTrader import ClaudeTraderModel  # claude_trader_operacao (fluxo real)
 
 BRASILIA        = timezone(timedelta(hours=-3))
+_ATIVO_SYMBOL   = {1: 1}          # id_ativos_base -> id_symbols (mt5_candles). 1 = WIN.
 _IA_MODEL       = "claude-haiku-4-5"
 _IA_MAX_TOKENS  = 600
 _LOTE_DEFAULT   = 5
@@ -146,6 +147,48 @@ def _replicar(prop, fund, intra):
     return ClaudeTraderModel().save(op)
 
 
+def _preco_atual(id_ativos_base):
+    """Ultimo close do WIN (mt5_candles). None se o feed estiver sem dado."""
+    symbol = _ATIVO_SYMBOL.get(id_ativos_base, id_ativos_base)
+    r = MySql().fetch("SELECT close FROM mt5_candles WHERE id_symbols=%s "
+                      "ORDER BY `datetime` DESC LIMIT 1", (symbol,)) or []
+    try:
+        return int(r[0]["close"]) if r else None
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _fora_da_banda(posicao, preco, stop_loss, stop_gain):
+    """REGRA 'fora_da_banda': o preco atual tem que estar DENTRO da banda operacional da
+    propria ordem [SL, SG]. Se saiu, a entrada nao vale mais:
+      - abaixo do SL (compra): a tese morreu — entraria e tomaria stop na hora
+      - acima do SG (compra):  o movimento JA aconteceu — entraria com o alvo atras
+    Auto-calibrante: cada ordem define sua tolerancia (stop largo tolera mais deriva).
+    Fail-open: sem preco/stops, nao barra (deixa o Haiku/EA decidir).
+    """
+    if preco is None or stop_loss is None or stop_gain is None:
+        return False
+    try:
+        preco, sl, sg = int(preco), int(stop_loss), int(stop_gain)
+    except (TypeError, ValueError):
+        return False
+    if posicao == "buy":
+        return not (sl < preco < sg)
+    return not (sg < preco < sl)
+
+
+def _estrategia_parada(id_estrategia):
+    """KILL SWITCH (estrategia.stop_geral=1): nao replica pro fluxo real. Continua analisando e
+    gravando o veredito (o dado e valioso pra calibracao) — so nao cria a op. Fail-safe: erro nao
+    para (a entrega tambem checa o stop_geral, entao ela e a barreira final)."""
+    try:
+        r = MySql().fetch("SELECT stop_geral FROM estrategia WHERE id_estrategia=%s LIMIT 1",
+                          (id_estrategia,))
+        return bool(r and int(r[0].get("stop_geral") or 0) == 1)
+    except Exception:
+        return False
+
+
 def _falhou(id_analise, tentativas_atual, msg):
     tent = (tentativas_atual or 0) + 1
     status = "erro" if tent >= _MAX_TENTATIVAS else "pendente"
@@ -181,35 +224,53 @@ class ClaudeTraderOperacaoAnaliseProcessarRule:
             intra = _intraday_proximo(prop["id_ativos_base"], ref_dt)
             contexto = _monta_contexto(prop, fund, intra)
 
-            resp = _call_haiku(contexto)
-            if not resp or resp.get("veredito") not in ("aprovado", "reprovado"):
-                return _falhou(id_analise, prop.get("tentativas"), "resposta invalida do Haiku")
-
-            veredito  = resp["veredito"]
-            confianca = resp.get("confianca")
+            # REGRA 'fora_da_banda' — roda ANTES do Haiku: se o preco ja saiu da banda [SL, SG]
+            # da propria ordem, a entrada nao vale mais e nem faz sentido gastar chamada de API.
+            # Fica registrada com regra='fora_da_banda' pra dar pra medir depois se a regra presta.
+            preco = _preco_atual(prop["id_ativos_base"])
+            if _fora_da_banda(prop["posicao"], preco, prop.get("stop_loss"), prop.get("stop_gain")):
+                veredito, regra, confianca = "reprovado", "fora_da_banda", 0
+                resp = None
+                motivo_v = ("Preco atual %s saiu da banda operacional [SL %s, SG %s] da ordem "
+                            "(entrada %s) — entrada defasada" %
+                            (preco, prop.get("stop_loss"), prop.get("stop_gain"),
+                             prop.get("preco_entrada")))
+            else:
+                resp = _call_haiku(contexto)
+                if not resp or resp.get("veredito") not in ("aprovado", "reprovado"):
+                    return _falhou(id_analise, prop.get("tentativas"), "resposta invalida do Haiku")
+                veredito, regra = resp["veredito"], "llm"
+                confianca = resp.get("confianca")
+                motivo_v = resp.get("motivo")
 
             ClaudeTraderOperacaoAnaliseVeredictoModel().save({
                 "id_operacao_analise":     id_analise,
                 "veredito":                veredito,
+                "regra":                   regra,
                 "confianca":               int(confianca) if isinstance(confianca, (int, float)) else None,
                 "fundamentalista_direcao": _dir_fund(fund),
                 "intraday_direcao":        _dir_intra(intra),
                 "id_market_analysis":      fund.get("id_market_analysis") if fund else None,
                 "id_intraday_origem":      intra.get("id_intraday_analysis") if intra else None,
-                "motivo":                  resp.get("motivo"),
-                "analise_json":            json.dumps({"contexto": contexto, "resposta": resp},
+                "motivo":                  motivo_v,
+                "analise_json":            json.dumps({"contexto": contexto, "preco_atual": preco,
+                                                       "regra": regra, "resposta": resp},
                                                       ensure_ascii=False, default=str),
                 "toggle_enforcado":        1 if enforce else 0,
             })
 
             ClaudeTraderOperacaoAnaliseModel().update({"analise": veredito}, id_analise)
 
-            # replicacao: modo sombra (enforce=false) SEMPRE replica; enforce=true so aprovado
+            # Replicacao: modo sombra (enforce=false) SEMPRE replica; enforce=true so aprovado.
+            # KILL SWITCH: stop_geral=1 -> nao replica (a entrega barraria de qualquer forma),
+            # mas o veredito acima JA foi gravado (nao perde historico durante uma parada).
+            parada = _estrategia_parada(prop["id_estrategia"])
             id_operacao = None
-            if (not enforce) or (veredito == "aprovado"):
+            if not parada and ((not enforce) or (veredito == "aprovado")):
                 id_operacao = _replicar(prop, fund, intra)
 
-            return {"id_operacao_analise": id_analise, "veredito": veredito,
-                    "confianca": confianca, "id_operacao_replicada": id_operacao}
+            return {"id_operacao_analise": id_analise, "veredito": veredito, "regra": regra,
+                    "confianca": confianca, "id_operacao_replicada": id_operacao,
+                    "stop_geral": parada}
         except Exception as e:
             return _falhou(id_analise, prop.get("tentativas"), str(e))
