@@ -6,10 +6,14 @@ from model.ClaudeTraderOperacaoAnalise import ClaudeTraderOperacaoAnaliseModel
 #   posicao      = buy | sell (direcao dura pra execucao)  [obrigatorio]
 #   tipo_posicao = TEXT livre  (resumo da entrada, ex: 'venda-curta')  [opcional]
 _CAMPOS_PERMITIDOS = (
-    "id_ativos_base", "id_estrategia", "posicao", "tipo_posicao", "preco_entrada",
+    "id_ativos_base", "id_estrategia", "posicao", "acao_mt5", "tipo_posicao", "preco_entrada",
     "stop_inicial", "stop_loss", "stop_gain", "alvo_1", "alvo_2", "motivo",
 )
 _OBRIGATORIOS = ("id_estrategia", "posicao", "preco_entrada")
+
+# Acoes que a inteligencia pode enfileirar. 'encerrar' NAO entra pela fila — e acionado na
+# mao em claude_trader_operacao.acao_mt5 (o EA le e fecha). Fica no ENUM do banco por simetria.
+_ACOES_FILA = ("abrir", "mover_stop")
 
 
 def _validar_stops(posicao, entrada, stop_loss, stop_gain):
@@ -60,16 +64,27 @@ class ClaudeTraderOperacaoAnaliseRule:
         if posicao not in ("buy", "sell"):
             return {"msg": "posicao deve ser 'buy' ou 'sell'"}, 422
 
-        # COERENCIA DOS STOPS: numa compra o SL fica ABAIXO e o SG ACIMA da entrada;
-        # numa venda e o inverso. Uma ordem com os stops trocados (bug de variavel na IA)
-        # e sem sentido — o stop de prejuizo ficaria onde daria lucro. Barra na porta de
-        # entrada pra a IA descobrir o bug dela aqui, e nao no mercado.
-        erro_stops = _validar_stops(posicao, data.get("preco_entrada"),
-                                    data.get("stop_loss"), data.get("stop_gain"))
-        if erro_stops:
-            return {"msg": erro_stops}, 422
+        # acao_mt5 (default 'abrir'): so 'abrir' e 'mover_stop' entram pela fila. 'encerrar' e
+        # manual (direto em claude_trader_operacao) — rejeita aqui pra nao criar rota sombra.
+        acao_mt5 = str(data.get("acao_mt5") or "abrir")
+        if acao_mt5 not in _ACOES_FILA:
+            return {"msg": "acao_mt5 deve ser 'abrir' ou 'mover_stop' "
+                           "('encerrar' e manual em claude_trader_operacao)"}, 422
+
+        # COERENCIA DOS STOPS (so no 'abrir'): numa compra o SL fica ABAIXO e o SG ACIMA da
+        # entrada; numa venda e o inverso. Ordem com stops trocados (bug de variavel na IA) e
+        # sem sentido — o stop de prejuizo ficaria onde daria lucro. Barra na porta pra a IA
+        # descobrir o bug aqui. NAO se aplica a 'mover_stop': um trailing legitimo CRUZA a
+        # entrada (ex.: buy travando lucro com stop ACIMA da entrada) — validar aqui
+        # reprovaria protecao de lucro valida.
+        if acao_mt5 == "abrir":
+            erro_stops = _validar_stops(posicao, data.get("preco_entrada"),
+                                        data.get("stop_loss"), data.get("stop_gain"))
+            if erro_stops:
+                return {"msg": erro_stops}, 422
 
         row = {c: data[c] for c in _CAMPOS_PERMITIDOS if data.get(c) is not None}
+        row["acao_mt5"] = acao_mt5
         row["analise"] = "pendente"
 
         new_id = ClaudeTraderOperacaoAnaliseModel().save(row)

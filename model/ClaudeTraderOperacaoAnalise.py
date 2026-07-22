@@ -10,6 +10,11 @@ class ClaudeTraderOperacaoAnaliseModel(BaseModel):
     Campos de direcao:
       - posicao: buy | sell (a direcao "dura" pra execucao)
       - tipo_posicao: TEXT livre — resumo da entrada (ex: 'venda-curta', 'entrada longa')
+
+    acao_mt5 (abrir|mover_stop|encerrar): o que a proposta pede ao fluxo real.
+      - abrir: Haiku analisa e replica a op nova (fluxo padrao).
+      - mover_stop: repassa novo stop de uma entrada JA analisada (pula o Haiku).
+      - encerrar: reservado — hoje e manual em claude_trader_operacao.acao_mt5.
     """
 
     def table(self):
@@ -24,6 +29,7 @@ class ClaudeTraderOperacaoAnaliseModel(BaseModel):
             "id_ativos_base": "id_ativos_base",
             "id_estrategia":  "id_estrategia",
             "posicao":        "posicao",
+            "acao_mt5":       "acao_mt5",
             "tipo_posicao":   "tipo_posicao",
             "preco_entrada":  "preco_entrada",
             "stop_inicial":   "stop_inicial",

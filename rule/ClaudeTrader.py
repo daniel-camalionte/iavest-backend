@@ -72,6 +72,15 @@ _CONFIG_DEFAULT = {
     "primeiro_tiro_ate_hhmm": PRIMEIRO_TIRO_ATE_HHMM, # 910
     "fim_pregao_hhmm":        FIM_PREGAO_HHMM,        # 1745 (ENCERRA a posição)
     "abertura_ate_hhmm":      ABERTURA_ATE_HHMM,      # 1730 (última ABERTURA de posição nova)
+    "equalizar_local":        False,                  # CEREBRO LOCAL (este modulo) — OMAKASE v2:
+                                                      # DESLIGADO por padrao. A estrategia e 100% FILA
+                                                      # (claude_trader_operacao_analise): o cerebro
+                                                      # EXTERNO manda abrir E mover_stop, e o EA cuida
+                                                      # da gestao. Com False, o /equalizar vira
+                                                      # SOMENTE-LEITURA (nao abre, nao gere, nao encerra)
+                                                      # — evita que o _gerir daqui brigue com o mover_stop
+                                                      # da fila pela mesma op. Estrategia de teste que
+                                                      # ainda queira o cerebro local liga com True.
     "reentrada":              False,                  # TRILHO DE REENTRADA (V2.6): com a principal
                                                       # aberta, abre uma op PARALELA (origem='reentrada')
                                                       # num sinal forte fresco na MESMA direção — pros
@@ -192,6 +201,18 @@ def _config_estrategia(id_estrategia):
     return cfg
 
 
+def _estrategia_parada(id_estrategia):
+    """KILL SWITCH: True se estrategia.stop_geral=1 (setado DIRETO no banco). Leitura FRESCA a
+    cada ciclo (sem cache) pro stop valer na hora. Fail-safe: erro de leitura NAO para (mantem
+    operando) — e um SELECT simples, e o /ordem ainda checa por conta (fecha o cliente)."""
+    try:
+        rows = MySql().fetch("SELECT stop_geral FROM estrategia WHERE id_estrategia=%s LIMIT 1",
+                             (id_estrategia,)) or []
+        return bool(rows and int(rows[0].get("stop_geral") or 0) == 1)
+    except Exception:
+        return False
+
+
 @contextmanager
 def _lock_operacao(id_ativos_base, id_estrategia, timeout=8):
     """Serializa o processar() por (ativo, estratégia) com um advisory lock do MySQL.
@@ -228,6 +249,14 @@ class ClaudeTraderRule:
         """Chamado pelo schedule (~1min). Gerência completa + devolve contrato MT5.
         id_estrategia (default 6 = Claude Trader): a ordem é da estratégia, não de
         um cliente — todos copiam a mesma posição."""
+        # OMAKASE v2: por padrão o cérebro/gestão LOCAL está DESLIGADO (equalizar_local=False) —
+        # a estratégia é 100% fila (o cérebro externo manda abrir E mover_stop; o EA gere). Aqui
+        # o /equalizar vira SOMENTE-LEITURA: não abre, não gere, não encerra — só devolve o contrato
+        # da principal. Impede que o _gerir daqui mova stop/encerre a op que a fila criou (conflito).
+        # Ler cfg é um SELECT simples; estratégia de teste reativa o cérebro local com equalizar_local=True.
+        if not _config_estrategia(id_estrategia).get("equalizar_local"):
+            prin = ClaudeTraderRule._principal_aberta(id_ativos_base, id_estrategia)
+            return ClaudeTraderRule._contrato_mt5(prin), 200
         preco = _preco_atual(id_ativos_base)
         if preco is None:
             return {"error": "Sem preço (mt5_candles)"}, 502
@@ -243,6 +272,16 @@ class ClaudeTraderRule:
                 return ClaudeTraderRule._contrato_mt5(prin), 200
 
             cfg = _config_estrategia(id_estrategia)   # defaults V2.4; id pode sobrescrever
+
+            # KILL SWITCH (stop_geral por estrategia): encerra TODAS as ops abertas e NAO abre
+            # mais nada, ate liberarem (stop_geral=0). Porta de maxima prioridade — antes de
+            # qualquer gestao/abertura. O /ordem tambem checa (fecha o cliente no proximo poll).
+            if _estrategia_parada(id_estrategia):
+                for op in ClaudeTraderRule._operacoes_abertas(id_ativos_base, id_estrategia):
+                    ClaudeTraderRule._encerrar(op, preco, "stop_geral",
+                                               "Stop geral acionado — encerra e nao opera")
+                return ClaudeTraderRule._contrato_mt5(None), 200
+
             abertas = ClaudeTraderRule._operacoes_abertas(id_ativos_base, id_estrategia)
 
             # estado NO INÍCIO do poll — define abrir x gerir, como na V2.5 ("se há posição, gere;

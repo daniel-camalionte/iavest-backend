@@ -654,6 +654,7 @@
                 "password":       { "type": "string",  "description": "CLAUDE_ANALISE_KEY (senha própria da rota)" },
                 "id_estrategia":  { "type": "integer", "example": 8 },
                 "posicao":        { "type": "string",  "enum": ["buy", "sell"], "example": "sell", "description": "direção dura pra execução" },
+                "acao_mt5":       { "type": "string",  "enum": ["abrir", "mover_stop"], "default": "abrir", "description": "abrir = Haiku analisa e replica a op (fluxo padrão); mover_stop = repassa novo stop de entrada já analisada (pula o Haiku, replica com status='instrucao'). 'encerrar' NÃO entra pela fila — é manual em claude_trader_operacao.acao_mt5." },
                 "tipo_posicao":   { "type": "string",  "description": "resumo livre da entrada, ex: 'venda-curta', 'entrada longa'" },
                 "preco_entrada":  { "type": "integer", "example": 178345 },
                 "stop_inicial":   { "type": "integer", "example": 178945 },
@@ -670,7 +671,7 @@
         "responses": {
           "201": { "description": "Inserido na fila. Ex.: { \"id_operacao\": 123, \"analise\": \"pendente\" }" },
           "401": { "description": "Senha incorreta" },
-          "422": { "description": "Campo obrigatório faltando ou posicao inválida" }
+          "422": { "description": "Campo obrigatório faltando, posicao inválida, acao_mt5 fora de [abrir, mover_stop] ('encerrar' é manual), ou stops incoerentes com a direção (só no abrir)" }
         }
       }
     },
