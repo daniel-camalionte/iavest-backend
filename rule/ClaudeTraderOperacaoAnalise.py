@@ -9,11 +9,15 @@ _CAMPOS_PERMITIDOS = (
     "id_ativos_base", "id_estrategia", "posicao", "acao_mt5", "tipo_posicao", "preco_entrada",
     "stop_inicial", "stop_loss", "stop_gain", "alvo_1", "alvo_2", "motivo",
 )
-_OBRIGATORIOS = ("id_estrategia", "posicao", "preco_entrada")
+# preco_entrada e exigido so p/ abrir e mover_stop (ver inserir); encerrar so precisa da direcao.
+_OBRIGATORIOS = ("id_estrategia", "posicao")
 
-# Acoes que a inteligencia pode enfileirar. 'encerrar' NAO entra pela fila — e acionado na
-# mao em claude_trader_operacao.acao_mt5 (o EA le e fecha). Fica no ENUM do banco por simetria.
-_ACOES_FILA = ("abrir", "mover_stop")
+# Acoes que a inteligencia pode enfileirar (o processar ramifica por acao_mt5):
+#   abrir      -> Haiku analisa e replica a op (status='aberta')
+#   mover_stop -> repassa novo stop pro EA (status='instrucao'), pula o Haiku
+#   encerrar   -> repassa fechamento pro EA (status='instrucao'), pula o Haiku (so precisa da direcao)
+_ACOES_FILA = ("abrir", "mover_stop", "encerrar")
+_ACOES_INSTRUCAO = ("mover_stop", "encerrar")
 
 
 def _validar_stops(posicao, entrada, stop_loss, stop_gain):
@@ -56,7 +60,18 @@ class ClaudeTraderOperacaoAnaliseRule:
         if str(data.get("password", "")) != str(key):
             return {"msg": "Senha incorreta"}, 401
 
-        faltando = [c for c in _OBRIGATORIOS if data.get(c) in (None, "")]
+        # acao_mt5 (default 'abrir'): abrir, mover_stop e encerrar entram pela fila (o processar
+        # ramifica). Valor invalido barra aqui.
+        acao_mt5 = str(data.get("acao_mt5") or "abrir")
+        if acao_mt5 not in _ACOES_FILA:
+            return {"msg": "acao_mt5 deve ser 'abrir', 'mover_stop' ou 'encerrar'"}, 422
+
+        # OBRIGATORIOS: id_estrategia e posicao sempre. preco_entrada so p/ abrir e mover_stop —
+        # 'encerrar' so precisa da DIRECAO (nao carrega entrada nem stops; o EA fecha a posicao).
+        obrigatorios = list(_OBRIGATORIOS)
+        if acao_mt5 in ("abrir", "mover_stop"):
+            obrigatorios.append("preco_entrada")
+        faltando = [c for c in obrigatorios if data.get(c) in (None, "")]
         if faltando:
             return {"msg": "Campos obrigatorios faltando: " + ", ".join(faltando)}, 422
 
@@ -64,19 +79,12 @@ class ClaudeTraderOperacaoAnaliseRule:
         if posicao not in ("buy", "sell"):
             return {"msg": "posicao deve ser 'buy' ou 'sell'"}, 422
 
-        # acao_mt5 (default 'abrir'): so 'abrir' e 'mover_stop' entram pela fila. 'encerrar' e
-        # manual (direto em claude_trader_operacao) — rejeita aqui pra nao criar rota sombra.
-        acao_mt5 = str(data.get("acao_mt5") or "abrir")
-        if acao_mt5 not in _ACOES_FILA:
-            return {"msg": "acao_mt5 deve ser 'abrir' ou 'mover_stop' "
-                           "('encerrar' e manual em claude_trader_operacao)"}, 422
-
         # COERENCIA DOS STOPS (so no 'abrir'): numa compra o SL fica ABAIXO e o SG ACIMA da
         # entrada; numa venda e o inverso. Ordem com stops trocados (bug de variavel na IA) e
         # sem sentido — o stop de prejuizo ficaria onde daria lucro. Barra na porta pra a IA
-        # descobrir o bug aqui. NAO se aplica a 'mover_stop': um trailing legitimo CRUZA a
-        # entrada (ex.: buy travando lucro com stop ACIMA da entrada) — validar aqui
-        # reprovaria protecao de lucro valida.
+        # descobrir o bug aqui. NAO se aplica a mover_stop/encerrar: um trailing legitimo CRUZA a
+        # entrada (ex.: buy travando lucro com stop ACIMA da entrada) e o encerrar nem carrega
+        # stops — validar aqui reprovaria instrucao valida.
         if acao_mt5 == "abrir":
             erro_stops = _validar_stops(posicao, data.get("preco_entrada"),
                                         data.get("stop_loss"), data.get("stop_gain"))

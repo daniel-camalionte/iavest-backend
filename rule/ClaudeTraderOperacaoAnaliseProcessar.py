@@ -133,9 +133,11 @@ def _replicar(prop, fund, intra, acao_mt5="abrir", status="aberta"):
         "origem":             prop.get("origem") or "principal",
         "tipo_posicao":       prop["posicao"],          # posicao (buy/sell) -> tipo_posicao da operacao
         "contratos":          1,
-        "preco_entrada":      prop.get("preco_entrada"),
-        "stop_inicial":       prop.get("stop_inicial") or prop.get("stop_loss"),
-        "stop_loss":          prop.get("stop_loss"),
+        # NOT NULL na claude_trader_operacao — coalesce p/ 0 (o 'encerrar' pode vir sem
+        # entrada/stop: o EA so usa acao + tipo_posicao pra fechar).
+        "preco_entrada":      prop.get("preco_entrada") or 0,
+        "stop_inicial":       prop.get("stop_inicial") or prop.get("stop_loss") or 0,
+        "stop_loss":          prop.get("stop_loss") or 0,
         "stop_gain":          prop.get("stop_gain"),
         "alvo_1":             prop.get("alvo_1"),
         "alvo_2":             prop.get("alvo_2"),
@@ -220,9 +222,10 @@ class ClaudeTraderOperacaoAnaliseProcessarRule:
 
     @staticmethod
     def _um(prop, enforce):
-        # mover_stop nao passa pelo Haiku (a entrada ja foi analisada) — so repassa o stop.
-        if (prop.get("acao_mt5") or "abrir") == "mover_stop":
-            return ClaudeTraderOperacaoAnaliseProcessarRule._mover_stop(prop, enforce)
+        # mover_stop/encerrar sao INSTRUCOES pro EA de uma posicao ja analisada — nao passam pelo
+        # Haiku; so repassam (status='instrucao').
+        if (prop.get("acao_mt5") or "abrir") in ("mover_stop", "encerrar"):
+            return ClaudeTraderOperacaoAnaliseProcessarRule._instrucao(prop, enforce)
 
         id_analise = prop["id_operacao"]
         try:
@@ -283,15 +286,16 @@ class ClaudeTraderOperacaoAnaliseProcessarRule:
             return _falhou(id_analise, prop.get("tentativas"), str(e))
 
     @staticmethod
-    def _mover_stop(prop, enforce):
-        """acao_mt5='mover_stop': repasse de stop de uma entrada JA analisada. NAO chama o Haiku
-        e NAO passa por fora_da_banda (a op ja esta viva no mercado; a banda e regra de ENTRADA).
-        Grava um veredito automatico (regra='mover_stop') so pra manter a trilha de auditoria,
-        marca a fila como 'aprovado' e replica uma linha em claude_trader_operacao com
-        acao_mt5='mover_stop' e status='instrucao' (repasse pro EA, NAO e posicao aberta).
-        Independe do toggle enforce — nao ha aprovacao a enforcar num movimento de stop.
+    def _instrucao(prop, enforce):
+        """acao_mt5 in ('mover_stop','encerrar'): INSTRUCAO pro EA de uma posicao JA analisada.
+        NAO chama o Haiku e NAO passa por fora_da_banda (a op ja esta viva; a banda e regra de
+        ENTRADA). Grava um veredito automatico (regra=<acao>) pra manter a trilha de auditoria,
+        marca a fila como 'aprovado' e replica uma linha em claude_trader_operacao com o proprio
+        acao_mt5 e status='instrucao' (repasse pro EA — o /ordem entrega esse acao; NAO e posicao
+        aberta). Independe do toggle enforce (nao ha aprovacao a enforcar numa instrucao).
         KILL SWITCH (stop_geral=1): nao replica, mas o veredito acima ja foi gravado."""
         id_analise = prop["id_operacao"]
+        acao = prop.get("acao_mt5") or "mover_stop"
         try:
             ref_dt = prop.get("created_at")
             fund  = _fundamentalista_do_dia(prop["id_ativos_base"], ref_dt)
@@ -300,14 +304,14 @@ class ClaudeTraderOperacaoAnaliseProcessarRule:
             ClaudeTraderOperacaoAnaliseVeredictoModel().save({
                 "id_operacao_analise":     id_analise,
                 "veredito":                "aprovado",
-                "regra":                   "mover_stop",
+                "regra":                   acao,
                 "confianca":               None,
                 "fundamentalista_direcao": _dir_fund(fund),
                 "intraday_direcao":        _dir_intra(intra),
                 "id_market_analysis":      fund.get("id_market_analysis") if fund else None,
                 "id_intraday_origem":      intra.get("id_intraday_analysis") if intra else None,
-                "motivo":                  "mover_stop: repasse de stop sem analise (stop_loss %s)"
-                                           % prop.get("stop_loss"),
+                "motivo":                  "%s: repasse pro EA sem analise (stop_loss %s)"
+                                           % (acao, prop.get("stop_loss")),
                 "analise_json":            None,
                 "toggle_enforcado":        1 if enforce else 0,
             })
@@ -317,9 +321,9 @@ class ClaudeTraderOperacaoAnaliseProcessarRule:
             parada = _estrategia_parada(prop["id_estrategia"])
             id_operacao = None
             if not parada:
-                id_operacao = _replicar(prop, fund, intra, acao_mt5="mover_stop", status="instrucao")
+                id_operacao = _replicar(prop, fund, intra, acao_mt5=acao, status="instrucao")
 
-            return {"id_operacao_analise": id_analise, "veredito": "aprovado", "regra": "mover_stop",
+            return {"id_operacao_analise": id_analise, "veredito": "aprovado", "regra": acao,
                     "id_operacao_replicada": id_operacao, "stop_geral": parada}
         except Exception as e:
             return _falhou(id_analise, prop.get("tentativas"), str(e))

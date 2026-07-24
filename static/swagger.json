@@ -649,14 +649,14 @@
             "required": true,
             "schema": {
               "type": "object",
-              "required": ["password", "id_estrategia", "posicao", "preco_entrada"],
+              "required": ["password", "id_estrategia", "posicao"],
               "properties": {
                 "password":       { "type": "string",  "description": "CLAUDE_ANALISE_KEY (senha própria da rota)" },
                 "id_estrategia":  { "type": "integer", "example": 8 },
                 "posicao":        { "type": "string",  "enum": ["buy", "sell"], "example": "sell", "description": "direção dura pra execução" },
-                "acao_mt5":       { "type": "string",  "enum": ["abrir", "mover_stop"], "default": "abrir", "description": "abrir = Haiku analisa e replica a op (fluxo padrão); mover_stop = repassa novo stop de entrada já analisada (pula o Haiku, replica com status='instrucao'). 'encerrar' NÃO entra pela fila — é manual em claude_trader_operacao.acao_mt5." },
+                "acao_mt5":       { "type": "string",  "enum": ["abrir", "mover_stop", "encerrar"], "default": "abrir", "description": "abrir = Haiku analisa e replica a op (status='aberta'); mover_stop = repassa novo stop de entrada já analisada (status='instrucao', pula o Haiku); encerrar = repassa fechamento pro EA (status='instrucao', pula o Haiku, só precisa da direção). mover_stop/encerrar não passam pela coerência de stop." },
                 "tipo_posicao":   { "type": "string",  "description": "resumo livre da entrada, ex: 'venda-curta', 'entrada longa'" },
-                "preco_entrada":  { "type": "integer", "example": 178345 },
+                "preco_entrada":  { "type": "integer", "example": 178345, "description": "obrigatório p/ abrir e mover_stop; encerrar dispensa" },
                 "stop_inicial":   { "type": "integer", "example": 178945 },
                 "stop_loss":      { "type": "integer", "example": 178945 },
                 "stop_gain":      { "type": "integer", "example": 177745 },
@@ -671,7 +671,7 @@
         "responses": {
           "201": { "description": "Inserido na fila. Ex.: { \"id_operacao\": 123, \"analise\": \"pendente\" }" },
           "401": { "description": "Senha incorreta" },
-          "422": { "description": "Campo obrigatório faltando, posicao inválida, acao_mt5 fora de [abrir, mover_stop] ('encerrar' é manual), ou stops incoerentes com a direção (só no abrir)" }
+          "422": { "description": "Campo obrigatório faltando, posicao inválida, acao_mt5 fora de [abrir, mover_stop, encerrar], ou stops incoerentes com a direção (só no abrir)" }
         }
       }
     },
